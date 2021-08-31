@@ -57,6 +57,8 @@ impl Server {
                                     format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
                                 }
                             };
+                            //TODO: Get icon to work. Currently pulling 0 bytes, try to load in a
+                            //png from a random place
                             println!("Icon bytes read: {}", content.len());
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
