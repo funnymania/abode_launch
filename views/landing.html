@@ -1,5 +1,6 @@
 <html>
 	<head>
+		<title>w&#601;? abode</title>
 		<link rel="icon" href="http://funnymania.lol/favicon.ico">
 	</head>
 	<body>
@@ -13,17 +14,32 @@
 		<!-- I can't take a soundbyte from a stream, can you? -->
 		<!-- Have you ever wanted to stream from one of these devices?  -->
 		<!-- Do you want to not have to rely on a company like Google or Apple for this?  -->
-		<button></button>
+		<h1>Your humble, Abode.</h1>
 		<h2>Pre-Release</h2>
+		<h3>For news on updates and developments</h3>
+		<button onclick="becomeSubscriber()">Receive updates through email</button>
 		<h3>For the iOS/macOS app</h3>
 		<button onclick="joinMaillist()">Get notified on release</button>
 		<h3>For Linux, Windows, and Mac users.</h3>
-		We have a Command Line Interface currently available.
+		We have a Command Line Interface currently available. This is undergoing rapid iteration, get on the news list to receive
 		<br>
-		<a href="https://drive.google.com/file/d/10B_uVzZc9KqJ906LQphsxO7wrK92O8w9/view?usp=sharing" target="_blank">Download Abode CLI</button>
+		<a href="https://drive.google.com/file/d/10B_uVzZc9KqJ906LQphsxO7wrK92O8w9/view?usp=sharing" target="_blank">Download Abode CLI</a>
+		<br>
+		<br>
+		<h3 id="num-install">0 active device installs</h3>
+		<br>
 	<script>
+	    // Requst resources... 
+	    let installs = fetch('api.funnymania.lol/installs');
+	    let numInstall = document.getByID('num-install');
+	    numInstall.innerHTML = installs + ' active installs';
+
+	function becomeSubscriber() {
+
+	}
 function joinMaillist() {
-	// send post to DB
+	// send post req
+
 }
 	</script>
 	</body>

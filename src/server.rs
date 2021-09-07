@@ -1,3 +1,6 @@
+extern crate postgres;
+use postgres::{Client, NoTls};
+
 use std::net::TcpStream;
 use std::net::TcpListener;
 use std::io::Read;
@@ -21,6 +24,9 @@ impl Server {
         address += &port.to_string();
         let listener = TcpListener::bind(&address).unwrap();
 
+        // Start postgres client
+        let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+
         for stream in listener.incoming() {
             println!("Got one!");
             
@@ -33,7 +39,7 @@ impl Server {
                 Err(msg) => println!("{}", msg),
                 Ok(bytes_read) => {
                     match Server::whats_reqd(String::from_utf8_lossy(&req).to_string()).as_str() {
-                        "/" => {
+                        "/" | "/wuh" => {
                             let content = match Server::get_page("/views/landing.html") {
                                 Ok(html) => html,
                                 Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
@@ -57,8 +63,6 @@ impl Server {
                                     format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
                                 }
                             };
-                            //TODO: Get icon to work. Currently pulling 0 bytes, try to load in a
-                            //png from a random place
                             println!("Icon bytes read: {}", content.len());
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
@@ -76,6 +80,20 @@ impl Server {
                             }
                             
                             stream.write(&byte_res).unwrap();
+                        }
+                        "/installs" => {
+                            let mut content = 0;
+                            match Server::get_installs(&mut client) {
+                                Ok(num) => content = num,
+                                Err(e) => content = 0,
+                            };
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n
+                                Content-Type: text/html\r\n
+                                Content-Length: 8\r\n\r\n{}",
+                                content
+                            );
+                            stream.write(response.as_bytes()).unwrap();
                         }
                         // "abodeCLI" => {
                         //     match Server::get_file("~/abode/target/release/abode.zip") {
@@ -129,12 +147,13 @@ impl Server {
     }
 
     pub fn get_file(file_path: &str) -> io::Result<fs::File> {
-       let mut file = fs::OpenOptions::new().read(true).open(file_path); 
+        let mut correct_path = format!("{}", env!("CARGO_MANIFEST_DIR"));
+        correct_path += file_path;
+       let mut file = fs::OpenOptions::new().read(true).open(correct_path); 
 
        file
     }
 
-    /// TODO: return parsed get resource
     pub fn whats_reqd(req: String) -> String {
         let mut lines: Vec<&str> = req.lines().collect();
         let first_line: Vec<&str> = lines[0].split(" ").collect();
@@ -146,7 +165,24 @@ impl Server {
             "POST" => {
                 String::from(first_line[1])
             }
-            _ => String::from(first_line[1])
+            _ => {
+                if first_line.len() < 2 {
+                    String::from("")
+                } else {
+                    String::from(first_line[1])
+                }
+            }
+        }
+    }
+
+    ///TODO: Ident authentication is failing for postgres user
+    pub fn get_installs(client: &mut postgres::Client) -> Result<i64, String> {
+        let res = client.query("SELECT value FROM installs", &[]);
+        match res {
+            Ok(rows) => {
+                Ok(rows[0].get(0))
+            }
+            Err(e) => Err(format!("{}", e)),
         }
     }
 }
