@@ -30,9 +30,15 @@
 		<br>
 	<script>
 	    // Requst resources... 
-	    let installs = fetch('api.funnymania.lol/installs');
-	    let numInstall = document.getByID('num-install');
-	    numInstall.innerHTML = installs + ' active installs';
+	    fetch('/installs')
+		.then(res => res.text())
+		.then(text => {
+			console.log(text)
+			installs = text
+		    let numInstall = document.getElementById('num-install');
+		    numInstall.innerHTML = installs + ' active installs';
+		}).catch(err => console.log(err));
+	    // console.log(installs);
 
 	function becomeSubscriber() {
 

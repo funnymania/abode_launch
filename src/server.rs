@@ -88,9 +88,9 @@ impl Server {
                                 Err(e) => content = 0,
                             };
                             response = format!(
-                                "HTTP/1.1 200 OK\r\n
-                                Content-Type: text/html\r\n
-                                Content-Length: 8\r\n\r\n{}",
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: 1\r\n\r\n{}",
                                 content
                             );
                             stream.write(response.as_bytes()).unwrap();
@@ -128,7 +128,7 @@ impl Server {
                     }
                 }
             }
-            print!("\n{}", String::from_utf8_lossy(&req[..]));
+            // print!("\n{}", String::from_utf8_lossy(&req[..]));
             
             stream.flush().unwrap();
         }
@@ -175,12 +175,12 @@ impl Server {
         }
     }
 
-    ///TODO: Ident authentication is failing for postgres user
     pub fn get_installs(client: &mut postgres::Client) -> Result<i64, String> {
         let res = client.query("SELECT value FROM installs", &[]);
         match res {
             Ok(rows) => {
-                Ok(rows[0].get(0))
+                let installs: i64 = rows[0].get("value");
+                Ok(installs)
             }
             Err(e) => Err(format!("{}", e)),
         }
