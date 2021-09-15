@@ -1,42 +1,95 @@
 <html>
 	<head>
 		<title>w&#601;? abode</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 		<link rel="icon" href="http://funnymania.lol/favicon.ico">
+		<link rel="stylesheet" href="global.css">
+		<style>
+			#splash {
+				width: 100%;
+				height: 100%;
+			}
+			body {
+				margin: 0;	
+			}
+		</style>
 	</head>
 	<body>
-		<!-- Vertical text roller  and vertical sliding -->
-		<!-- Do you have roll[large files...]  -->
-		<!-- Do you have roll[friends...]  -->
-		<!-- slide[Do you want to send those large files to friends?...]  -->
-		<!-- What about roll[iPhone-to-windows] 
-	  what about roll[android-to-mac] -->
-		<!--	it's become such a hassle that we have to pay streaming services for everything, but none of the content which we own ourselves-->
-		<!-- I can't take a soundbyte from a stream, can you? -->
-		<!-- Have you ever wanted to stream from one of these devices?  -->
-		<!-- Do you want to not have to rely on a company like Google or Apple for this?  -->
-		<h1>Your humble, Abode.</h1>
-		<h2>Pre-Release</h2>
-		<h3>For news on updates and developments</h3>
-		<button onclick="becomeSubscriber()">Receive updates through email</button>
-		<h3>For the iOS/macOS app</h3>
-		<button onclick="joinMaillist()">Get notified on release</button>
-		<h3>For Linux, Windows, and Mac users.</h3>
-		We have a Command Line Interface currently available. This is undergoing rapid iteration, get on the news list to receive
-		<br>
-		<a href="https://drive.google.com/file/d/10B_uVzZc9KqJ906LQphsxO7wrK92O8w9/view?usp=sharing" target="_blank">Download Abode CLI</a>
-		<br>
-		<br>
+		<div id="splash"> 
+			<!-- covers full screen (and then some?)-->
+			<!-- <img src="some-img"></img> -->
+			<div id="splash-grid">
+				<h1 class="two">Your humble, Abode.</h1>
+				<div class="three">
+					<p>we do not store your data</p>
+					<p>we do not store any of your activity</p>
+				</div>
+				<div class="four">
+					<a href="/why???">why this matters</a>
+				</div>
+			</div>
+		</div>
+		<div id="news-section">
+			<div class="container">
+				<h2>Want to start using it now?&nbsp;</h2>
+				<h3><a href="/pre-release">We're offering Pre-release for interested parties</a></h3>
+			</div>
+		</div>
+		<div id="donate">
+			<div class="card">
+				<h2>Help us out while we bootstrap this monster</h2>
+				<h3><a href="">Buy us a coffee</a></h3>
+				<h3><a href="">Send us your crypto</a></h3>
+			</div>
+		</div>
+		<div id="release-schedule">
+			<div id="release-spacer"></div>
+			<div id="milestone-container">
+				<div class="milestone">
+					<h3>Desktop Terminal User Interface</h3>
+					<br>
+					<div class="milestone-approx">Sept 27, 2021</div>
+					<br>
+					<div class="milestone-desc">fdsf</div>
+				</div>
+				<div class="milestone">
+					<h3>iPhone + Mac Client</h3>
+					<br>
+					<div class="milestone-approx">Sept 27, 2021</div>
+					<br>
+					<div class="milestone-desc">fdsf</div>
+				</div>
+			</div>
+		</div>
+		<div id="subscriber-section">
+			<div class="flex">
+				<h2>For news on updates and developments:&nbsp;</h2>
+				<h2><a onclick="becomeSubscriber()">Receive updates through email</a></h2>
+			</div>
+		</div>
+		<div id="waitlist-section">
+			<div class="flex">
+				<h2>For the iOS/macOS app:&nbsp;</h2>
+				<h2><a onclick="joinMaillist()">Get on the Waiting List</a></h2>
+			</div>
+		</div>
+		<div id="desktop-cli">
+			<div class="flex">
+				<h2>For Linux, Windows, and Mac users:&nbsp;</h2>
+				<h2><a href="https://drive.google.com/file/d/10B_uVzZc9KqJ906LQphsxO7wrK92O8w9/view?usp=sharing" target="_blank">Download Abode CLI</a></h2>
+			</div>
+		</div>
 		<h3 id="num-install">0 active device installs</h3>
 		<br>
+		<h3>Contact us with business inquiries: mcclureDmichael@gmail.com</h3>
 	<script>
 	    // Requst resources... 
 	    fetch('/installs')
 		.then(res => res.text())
 		.then(text => {
-			console.log(text)
-			installs = text
+		    installs = text
 		    let numInstall = document.getElementById('num-install');
-		    numInstall.innerHTML = installs + ' active installs';
+		    numInstall.innerHTML = installs + ' active device installs';
 		}).catch(err => console.log(err));
 	    // console.log(installs);
 

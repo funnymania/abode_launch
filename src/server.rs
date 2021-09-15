@@ -39,7 +39,7 @@ impl Server {
                 Err(msg) => println!("{}", msg),
                 Ok(bytes_read) => {
                     match Server::whats_reqd(String::from_utf8_lossy(&req).to_string()).as_str() {
-                        "/" | "/wuh" => {
+                        "/" | "/wuh???" => {
                             let content = match Server::get_page("/views/landing.html") {
                                 Ok(html) => html,
                                 Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
@@ -51,7 +51,11 @@ impl Server {
                                 content.len(),
                                 content
                             );
-                            stream.write(response.as_bytes()).unwrap();
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
                         }
                         "/favicon.ico" => {
                             let mut content = Vec::new();
@@ -81,16 +85,53 @@ impl Server {
                             
                             stream.write(&byte_res).unwrap();
                         }
-                        "/installs" => {
-                            let mut content = 0;
-                            match Server::get_installs(&mut client) {
-                                Ok(num) => content = num,
-                                Err(e) => content = 0,
+                        "/global.css" => {
+                            let content = match Server::get_page("/rsrcs/global.css") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
                             };
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
                                 Content-Type: text/html\r\n\
-                                Content-Length: 1\r\n\r\n{}",
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
+                        }
+                        "/why???" => {
+                            let content = match Server::get_page("/views/why.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
+                        }
+                        "/installs" => {
+                            let mut content = String::new();
+                            match Server::get_installs(&mut client) {
+                                Ok(num) => content = num.to_string(),
+                                Err(e) => content = "0".to_string(),
+                            };
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
                                 content
                             );
                             stream.write(response.as_bytes()).unwrap();
@@ -185,4 +226,7 @@ impl Server {
             Err(e) => Err(format!("{}", e)),
         }
     }
+
+    /// Return a result if success, etc. Intent is to be aware of whenever files are 
+    pub fn email_dev() {}
 }
