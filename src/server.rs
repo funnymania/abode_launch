@@ -38,7 +38,8 @@ impl Server {
             match stream.read(&mut req) {
                 Err(msg) => println!("{}", msg),
                 Ok(bytes_read) => {
-                    match Server::whats_reqd(String::from_utf8_lossy(&req).to_string()).as_str() {
+                    let str_req = Server::whats_reqd(String::from_utf8_lossy(&req).to_string());
+                    match str_req.as_str() {
                         "/" | "/wuh???" => {
                             let content = match Server::get_page("/views/landing.html") {
                                 Ok(html) => html,
@@ -153,10 +154,46 @@ impl Server {
                         //     }
                         // }
                         _ => {
-                            let content = match Server::get_page("/views/whats-that.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
+                            match Server::get_extension(&str_req) {
+                                Ok(ext) => {
+                                    let mut content = Vec::new();
+                                    match ext {
+                                        "svg" => {
+                                            match Server::get_file(format!("/rsrcs/{}",  str_req).as_str()) {
+                                                Ok(mut svg) => {
+                                                    svg.read_to_end(&mut content);
+                                                }
+                                                Err(e) => {
+                                                    format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                                                }
+                                            };
+                                            println!("SVG bytes read: {}", content.len());
+                                            response = format!(
+                                                "HTTP/1.1 200 OK\r\n\
+                                                Content-Type: image/svg+xml\r\n\
+                                                Content-Length: {}\r\n\r\n",
+                                                content.len(),
+                                            );
+                                            let mut byte_res: Vec<u8> = Vec::new();
+                                            for byte in response.as_bytes() {
+                                                byte_res.push(*byte);
+                                            }
+
+                                            for byte in content {
+                                                byte_res.push(byte);
+                                            }
+                                            
+                                            stream.write(&byte_res).unwrap();
+                                            
+                                        }
+                                        _ => (),
+                                    }
+                                },
+                                _ => {
+                                    let content = match Server::get_page("/views/whats-that.html") {
+                                        Ok(html) => html,
+                                        Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                                    };
 
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
@@ -165,6 +202,9 @@ impl Server {
                                 content
                             );
                             stream.write(response.as_bytes()).unwrap();
+
+                                }
+                            }
                         }
                     }
                 }
@@ -229,4 +269,22 @@ impl Server {
 
     /// Return a result if success, etc. Intent is to be aware of whenever files are 
     pub fn email_dev() {}
+
+    pub fn get_extension(path: &str) -> Result<&str, String> {
+        let mut left: usize = 0;
+        let right = path.len();
+       for p in path.char_indices().rev() {
+            if p.1 == '.' {
+                left = p.0 + 1;
+                break;
+            }
+       }
+
+       if left == 0 {
+           Err("".to_string()) 
+       } else {
+           println!("{}", &path[left..right]);
+           Ok(&path[left..right])
+       }
+    }
 }
