@@ -93,7 +93,7 @@ impl Server {
                             };
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
+                                Content-Type: text/css\r\n\
                                 Content-Length: {}\r\n\r\n{}",
                                 content.len(),
                                 content
@@ -158,6 +158,8 @@ impl Server {
                                 Ok(ext) => {
                                     let mut content = Vec::new();
                                     match ext {
+                                        //TODO: Consider stripping evil things like '../..' from
+                                        // the requested resource.
                                         "svg" => {
                                             match Server::get_file(format!("/rsrcs/{}",  str_req).as_str()) {
                                                 Ok(mut svg) => {
