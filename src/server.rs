@@ -105,7 +105,25 @@ impl Server {
                             }
                         }
                         "/why???" => {
-                            let content = match Server::get_page("/views/why.html") {
+                            let content = match Server::get_page("/views/why???.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
+                        }
+                        "/pre-release" => {
+                            let content = match Server::get_page("/views/pre-release.html") {
                                 Ok(html) => html,
                                 Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
                             };

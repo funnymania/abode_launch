@@ -5,7 +5,7 @@
     height: 100%;
     border-bottom: 24px dashed #0D0D0D;
     position: relative;
-    z-index: -1;
+    /* z-index: -1; */
 }
 
 body {
@@ -17,7 +17,7 @@ body {
 
 a {
     color: white;
-	cursor: pointer;
+    cursor: pointer;
     text-decoration: underline;
 }
 
@@ -65,7 +65,8 @@ a {
     justify-content: center;
     flex-wrap: wrap;
     height: 100%;
-	border-bottom: 24px dashed #0442BF;
+    border-bottom: 24px dashed #0442BF;
+    position: relative;
 }
 
 #news-section .container {
@@ -95,6 +96,7 @@ a {
     flex-wrap: wrap;
     height: 100%;
     border-bottom: 24px dashed #96F20C;
+    position: relative;
 }
 
 #donate .container {
@@ -107,7 +109,7 @@ a {
     border-top: 24px double #0D0D0D;
     border-left: 24px double;
     border-right: 24px double;
-	border-radius: 20px 20px 0px 0px;
+    border-radius: 20px 20px 0px 0px;
     height: 100%;
 }
 
@@ -230,18 +232,18 @@ a {
 
 @keyframes spin-slow {
     0% {
-	transform: rotateZ(0deg);
+		transform: rotateZ(0deg);
     }
     100% {
-	transform: rotateZ(359deg);
+		transform: rotateZ(359deg);
     }
 }
 
 @keyframes move-up {
     0% {
-	transform: translateY(100%);
+		transform: translateY(100%);
     }
     100% {
-	transform: translateY(70%);
+		transform: translateY(70%);
     }
 }
