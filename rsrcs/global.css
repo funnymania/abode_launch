@@ -2,10 +2,13 @@
     color: #000036;
     background-color: #88A2F2;
     width: 100%;
-    height: 100%;
     border-bottom: 24px dashed #0D0D0D;
     position: relative;
     /* z-index: -1; */
+}
+
+html {
+	overflow-y: scroll;
 }
 
 body {
@@ -13,6 +16,8 @@ body {
     font-family: Monaco, monospace;
     color: #e0ffff;
     height: 100%;
+	overflow-y: scroll;
+	scroll-snap-type: y mandatory;
 }
 
 a {
@@ -59,17 +64,45 @@ a {
     animation-fill-mode: forwards;
 }
 
+.section-no-flex {
+    height: 100%;
+    position: relative;
+	scroll-snap-align: start;
+}
 
-#news-section {
+.section {
+	scroll-snap-stop: always;
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
     height: 100%;
-    border-bottom: 24px dashed #0442BF;
     position: relative;
+	scroll-snap-align: start;
 }
 
-#news-section .container {
+#desc {
+    border-bottom: 24px dashed #0442BF;
+}
+
+#desc .container {
+    background-color: #0D0D0D;
+    flex: 1;
+    text-align: center;
+    box-sizing: border-box;
+    color: #c8f7c5;
+    border-top: 24px double #88A2F2;
+    border-bottom: 30px double #0442BF;
+    border-left: 24px double;
+    border-right: 24px double;
+    border-radius: 20px 20px 0px 0px;
+    height: 100%;
+}
+
+#news {
+    border-bottom: 24px dashed #0442BF;
+}
+
+#news .container {
     background-color: #0D0D0D;
     flex: 1;
     text-align: center;
@@ -91,12 +124,7 @@ a {
 
 #donate {
     background-color: #0442BF;
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    height: 100%;
     border-bottom: 24px dashed #96F20C;
-    position: relative;
 }
 
 #donate .container {
@@ -125,7 +153,6 @@ a {
 }
 
 #release-schedule {
-    height: 100%;
 	background-color: #96f20c;
     border-bottom: 24px dashed #8C0D53;
 }
@@ -172,13 +199,12 @@ a {
 
 }
 
-#subscriber-section {
+#subscriber {
     background-color: #8C0D53;
 	border-bottom: 24px dashed #280003;
-	height: 100%;
 }
 
-#subscriber-section .container {
+#subscriber .container {
 	display: flex;
 	flex-direction: column;
 	justify-content: space-evenly;
@@ -193,13 +219,13 @@ a {
     height: 100%;
 }
 
-#subscriber-section .flex {
+#subscriber .flex {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
 }
 
-#subscriber-section h2 {
+#subscriber h2 {
 	text-align: center;
     color: #3dd92d;
 }
