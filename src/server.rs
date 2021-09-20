@@ -31,7 +31,10 @@ impl Server {
             println!("Got one!");
             
             let mut stream = stream.unwrap();
-            let mut req = [0; 512];
+            //TODO: This buffer may be too small!!! 
+            //Browser extensions CRAM a lot of extra data into the cookie header. 
+            //It is not an Error for this buffer to be too small, so we won't catch it
+            let mut req = [0; 1024];
 
             // Split to different actions
             let mut response = String::new();
@@ -53,9 +56,9 @@ impl Server {
                                 content
                             );
 
-                            match stream.write(response.as_bytes()) {
+                            match stream.write_all(response.as_bytes()) {
                                 Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
-                                _ => ()
+                                Ok(num) => (),
                             }
                         }
                         "/favicon.ico" => {
@@ -204,7 +207,6 @@ impl Server {
                                             }
                                             
                                             stream.write(&byte_res).unwrap();
-                                            
                                         }
                                         _ => (),
                                     }

@@ -113,6 +113,17 @@ a {
     height: 100%;
 }
 
+.pay-button {
+    background-color: white;
+    color: #280003;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: inherit;
+    padding: 22px;
+    border-radius: 11px;
+    cursor: pointer;
+}
+
 #release-schedule {
     height: 100%;
 	background-color: #96f20c;

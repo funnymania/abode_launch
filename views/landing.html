@@ -33,7 +33,7 @@
 					<p>just have fun.</p> 
 				</div>
 				<div class="grid-child four">
-					<a href="/why???">why this matters</a>
+					<button class="pay-button" onclick="openWhy()">why this matters</button>
 				</div>
 			</div>
 			<div class="house" style="margin-left:10%"></div>
@@ -55,7 +55,7 @@
 				<div class="center-me">
 					<h2>Help us out while we bootstrap this monster</h2>
 					<h3><a href="https://ko-fi.com/funnymania">Buy us a coffee</a></h3>
-					<h3><a href="">Send us your crypto</a></h3>
+					<h3><button id="pay-button" class="pay-button">Tip your crypto to us~</button></h3>
 				</div>
 			</div>
 		</div>
@@ -124,13 +124,54 @@
 		}).catch(err => console.log(err));
 	    // console.log(installs);
 
-	function becomeSubscriber() {
+		// Load ETH options.
+		window.addEventListener('load', () => {
+			if (window.ethereum) {
+				try {
+					initPayButton()
+				} catch (err) {
+					console.log('User denied account access')
+				}
+			} else if (window.web3) {
+				window.web3 = new Web3(web3.currentProvider);
+				initPayButton()
+			} else {
+				console.log('No Metamask (or other Web3 Provider) installed')
+			}
+		})
 
-	}
-function joinMaillist() {
-	// send post req
+		const initPayButton = () => {
+			let payButton = document.getElementById('pay-button');
+			payButton.addEventListener('click', async () => {
+				const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+				const account = accounts[0];
+				const paymentAddress = '0x01228B362cFA8764A3bDB2eAf09FE57d370658E9';
+				const amountEth = 1;
+				const transaction = {
+					to: paymentAddress,
+					from: account
+				};
+				ethereum.request({
+					method: 'eth_sendTransaction',
+					params: [transaction]
+				})
+				.then((txHash) => console.log(txHash))
+				.catch((err) => console.error);
+			})
+		}
 
-}
+		function openWhy() {
+			// window.location.assign('http://funnymania.lol/why???');
+		}
+
+		function becomeSubscriber() {
+
+		}
+
+		function joinMaillist() {
+			// send post req
+
+		}
 	</script>
 	</body>
 </html>
