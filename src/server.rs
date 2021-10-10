@@ -5,6 +5,7 @@ use std::net::TcpStream;
 use std::net::TcpListener;
 use std::io::Read;
 use std::io::Write;
+use std::thread;
 use std::io;
 use std::fs;
 
@@ -27,21 +28,32 @@ impl Server {
         // Start postgres client
         let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
 
+        // open Log file
+        let mut log_file = Server::tail_file().unwrap();
+
         for stream in listener.incoming() {
             println!("Got one!");
             
             let mut stream = stream.unwrap();
-            //TODO: This buffer may be too small!!! 
             //Browser extensions CRAM a lot of extra data into the cookie header. 
             //It is not an Error for this buffer to be too small, so we won't catch it
-            let mut req = [0; 1024];
+            let mut req = [0; 2048];
 
             // Split to different actions
             let mut response = String::new();
             match stream.read(&mut req) {
                 Err(msg) => println!("{}", msg),
                 Ok(bytes_read) => {
+                    // If the requests contain a lot of data, we will log it, because we are curious how
+                    // people are requesting, and then skip it.
+                    if bytes_read > 1024 {
+                        Server::add_to_file(&log_file, &req);
+                        continue;
+                    }
+
+                    println!("Byte of reqs: {}", bytes_read);
                     let str_req = Server::whats_reqd(String::from_utf8_lossy(&req).to_string());
+                    println!("Path: {}", str_req);
                     match str_req.as_str() {
                         "/" | "/wuh???" => {
                             let content = match Server::get_page("/views/landing.html") {
@@ -252,15 +264,14 @@ impl Server {
     pub fn get_file(file_path: &str) -> io::Result<fs::File> {
         let mut correct_path = format!("{}", env!("CARGO_MANIFEST_DIR"));
         correct_path += file_path;
-       let mut file = fs::OpenOptions::new().read(true).open(correct_path); 
+        let mut file = fs::OpenOptions::new().read(true).open(correct_path); 
 
-       file
+        file
     }
 
     pub fn whats_reqd(req: String) -> String {
         let mut lines: Vec<&str> = req.lines().collect();
         let first_line: Vec<&str> = lines[0].split(" ").collect();
-        println!("{}", lines[0]);
         match first_line[0] {
             "GET" => {
                 String::from(first_line[1])
@@ -308,5 +319,21 @@ impl Server {
            println!("{}", &path[left..right]);
            Ok(&path[left..right])
        }
+    }
+
+    pub fn tail_file() -> io::Result<fs::File> {
+        let mut file_path = format!("{}", env!("CARGO_MANIFEST_DIR"));
+        file_path += "/logs/tail.txt";
+        let mut file = fs::OpenOptions::new().create(true).read(true).write(true).open(file_path);
+
+        file
+    }
+
+    pub fn add_to_file(mut file: &fs::File, req: &[u8]) {
+        let mut contents = String::new();
+        file.read_to_string(&mut contents);
+        if contents.len() + req.len() < 4096 {
+           file.write(req);
+        }
     }
 }
