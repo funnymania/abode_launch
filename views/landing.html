@@ -158,23 +158,31 @@
 			}
 		})
 
+		let currentAccount;
+		let connected = false;
 		const initPayButton = () => {
 			let payButton = document.getElementById('pay-button');
 			payButton.addEventListener('click', async () => {
-				const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-				const account = accounts[0];
-				const paymentAddress = '0x01228B362cFA8764A3bDB2eAf09FE57d370658E9';
-				const amountEth = 1;
-				const transaction = {
-					to: paymentAddress,
-					from: account
-				};
-				ethereum.request({
-					method: 'eth_sendTransaction',
-					params: [transaction]
-				})
-				.then((txHash) => console.log(txHash))
-				.catch((err) => console.error);
+				if (!connected) {
+					const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+					currentAccount = accounts[0];
+					payButton.innerHTML = '♥️💙♥️♥️💚 ~ tip us ~ 💚♥️♥️💙♥️';
+					connected = true;
+				} else {
+					const paymentAddress = '0xCF6D436D10AD34029884066E71F5e4887eCd9aDb';
+					const hexWei = '0x16345785D8A0000';
+					const transaction = {
+						to: paymentAddress,
+						from: currentAccount,
+						value: hexWei
+					};
+					ethereum.request({
+						method: 'eth_sendTransaction',
+						params: [transaction]
+					})
+					.then((txHash) => console.log(txHash))
+					.catch((err) => console.error);
+				}
 			})
 		}
 
