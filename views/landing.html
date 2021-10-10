@@ -45,6 +45,11 @@
 		<div id="desc" class="section">
 			<div class="container">
 				<div class="center-me">
+						<!--
+					<video>
+						<source src="tui.mp4" type="video/mp4">
+					</video>
+						-->
 					<h2>Abode is tiny, intimate, and cheap</h2>
 					<h3>For sharing files, it is <u>cheaper</u> than Drive and Dropbox.</h3>
 					<h3>For talking with friends, it is <u>more cozy</u> than social media</h3> 
@@ -66,7 +71,8 @@
 				<div class="center-me">
 					<h2>Help us out while we bootstrap this monster</h2>
 					<h3><a href="https://ko-fi.com/funnymania">Buy us a coffee</a></h3>
-					<h3><button id="pay-button" class="pay-button">Tip your crypto to us~</button></h3>
+					<h2>Tip us with crypto!</h2>
+					<h3><button id="pay-button" class="pay-button">~Connect to MetaMask~</button></h3>
 				</div>
 			</div>
 		</div>
@@ -78,17 +84,17 @@
 				<div id="milestone-container">
 					<div class="milestone">
 						<h2>Desktop Terminal User Interface</h2>
-						<h3 class="milestone-approx">September</h3>
+						<h3 class="milestone-approx">November 2021</h3>
 						<h3 class="milestone-desc">Desktop Client available for Early Access</h3>
 					</div>
 					<div class="milestone">
 						<h2>MacOS Client</h2>
-						<h3 class="milestone-approx">October</h3>
+						<h3 class="milestone-approx">Q4 2021</h3>
 						<h3 class="milestone-desc">Graphical UI for Mac</h3>
 					</div>
 					<div class="milestone">
 						<h2>iOS Client</h2>
-						<h3 class="milestone-approx">November</h3>
+						<h3 class="milestone-approx">Q4 2021</h3>
 						<h3 class="milestone-desc">iOS App v1</h3>
 					</div>
 					<!--
@@ -127,12 +133,13 @@
 	<script>
 	    // Requst resources... 
 	    fetch('/installs')
-		.then(res => res.text())
-		.then(text => {
-		    installs = text
-		    let numInstall = document.getElementById('num-install');
-		    numInstall.innerHTML = installs + ' active device installs';
-		}).catch(err => console.log(err));
+			.then(res => res.text())
+			.then(text => {
+				installs = text
+				let numInstall = document.getElementById('num-install');
+				numInstall.innerHTML = installs + ' active device installs';
+			})
+			.catch(err => console.log(err));
 	    // console.log(installs);
 
 		// Load ETH options.
