@@ -205,9 +205,7 @@ a {
 }
 
 #subscriber .container {
-	display: flex;
-	flex-direction: column;
-	justify-content: space-evenly;
+	flex: 1;
     text-align: center;
     box-sizing: border-box;
     color: #3dd92d;
@@ -215,12 +213,13 @@ a {
     border-bottom: 24px double #280003;
     border-left: 24px double;
     border-right: 24px double;
-    border-radius: 20px;
+    border-radius: 20px 20px 0px 0px;
     height: 100%;
 }
 
 #subscriber .flex {
     display: flex;
+	flex-direction: column;
     flex-wrap: wrap;
     justify-content: center;
 }
