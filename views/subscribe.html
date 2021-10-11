@@ -23,7 +23,7 @@
 	<body>
 		<!--TODO: Enter email! -->
 		<div>
-			<input id="email-field" type="text">Enter your email address...</input>
+			<input id="email-field" type="text" placeholder="Enter your email address..."></input>
 			<button onclick="postEmail()">Send</button>
 			<div id="form-res">
 			</div>
@@ -33,18 +33,25 @@
 			let email;
 			function postEmail() {
 				//Get input
-				let field = document.getElementsByID('email-field');
+				let field = document.getElementByID('email-field');
+
+				//Validate
+				if (field.content.length > 255) {
+					let resEl = document.getElementByID('form-res');
+					resEl.innerHTML = 'Email must be shorter than 256 characters';
+					return;
+				}
 
 				// Form post request
 				let post = {
-					type: 'POST',
-					data: field.content,
+					method: 'POST',
+					body: JSON.stringify(field.content),
 					route: 'subscriber/add'
 				}
 
 				// request, display response
-				fetch(post)
-					.then(res => res.json());
+				fetch('subscriber', post)
+					.then(res => res.json())
 					.then(res => {
 						if (res.code === 'Success') {
 							let resEl = document.getElementByID('form-res');

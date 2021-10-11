@@ -1,4 +1,5 @@
 mod server;
+mod uuid;
 
 use server::Server;
 

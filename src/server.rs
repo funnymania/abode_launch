@@ -1,6 +1,7 @@
 extern crate postgres;
 use postgres::{Client, NoTls};
 
+use crate::uuid;
 use std::net::TcpStream;
 use std::net::TcpListener;
 use std::io::Read;
@@ -119,6 +120,26 @@ impl Server {
                                 _ => ()
                             }
                         }
+                        "/subscribe" => {
+                            let content = match Server::get_page("/views/subscribe.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
+                        }
+
                         "/why???" => {
                             let content = match Server::get_page("/views/why???.html") {
                                 Ok(html) => html,
@@ -168,6 +189,24 @@ impl Server {
                                 content.len(),
                                 content
                             );
+                            stream.write(response.as_bytes()).unwrap();
+                        }
+                        //TODO: Get body of post req
+                        "/subscriber" => {
+                            let mut content = String::new();
+                            match Server::add_subscriber(&mut client) {
+                                Ok(res) => content = res,
+                                Err(e) => content = "Other".to_string(),
+                            };
+
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
                             stream.write(response.as_bytes()).unwrap();
                         }
                         // "abodeCLI" => {
@@ -335,5 +374,19 @@ impl Server {
         if contents.len() + req.len() < 4096 {
            file.write(req);
         }
+    }
+
+    pub fn add_subscriber(client: &mut postgres::Client, email: &str) -> io::Result<String> {
+        //generate unique ID
+        let uuid = uuid::create(); 
+
+        let res = client.query("INSERT INTO subscribers VALUES($1, $2)", &[&uuid, email]);
+        match res {
+            Ok(rows) => {
+                Ok(String::from("Success"))
+            }
+            Err(e) => Err(format!("{}", e)),
+        }
+        
     }
 }
