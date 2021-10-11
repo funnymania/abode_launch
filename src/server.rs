@@ -2,7 +2,6 @@ extern crate postgres;
 use postgres::{Client, NoTls};
 
 use crate::uuid;
-use std::net::TcpStream;
 use std::net::TcpListener;
 use std::io::Read;
 use std::io::Write;
@@ -191,13 +190,13 @@ impl Server {
                             );
                             stream.write(response.as_bytes()).unwrap();
                         }
-                        //TODO: Get body of post req
                         "/subscriber" => {
                             let mut content = String::new();
-                            match Server::add_subscriber(&mut client) {
-                                Ok(res) => content = res,
-                                Err(e) => content = "Other".to_string(),
-                            };
+                            println!("{:?}", req);
+                            // match Server::add_subscriber(&mut client) {
+                            //     Ok(res) => content = res,
+                            //     Err(e) => content = "Other".to_string(),
+                            // };
 
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
@@ -376,11 +375,11 @@ impl Server {
         }
     }
 
-    pub fn add_subscriber(client: &mut postgres::Client, email: &str) -> io::Result<String> {
+    pub fn add_subscriber<'a>(client: &mut postgres::Client, email: String) -> Result<String, String> {
         //generate unique ID
-        let uuid = uuid::create(); 
+        let uuid = &uuid::create()[..]; 
 
-        let res = client.query("INSERT INTO subscribers VALUES($1, $2)", &[&uuid, email]);
+        let res = client.query("INSERT INTO subscribers VALUES($1, $2)", &[&uuid, &email]);
         match res {
             Ok(rows) => {
                 Ok(String::from("Success"))
