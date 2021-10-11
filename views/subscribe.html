@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>w&#601;? abode | news subscribe</title>
+		<meta name="description" content="Add your email to stay up to date.">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+		<link rel="icon" href="http://funnymania.lol/favicon.ico">
+		<link rel="stylesheet" href="global.css">
+		<style>
+			html {
+				height: 100%;
+			}
+			#splash {
+				width: 100%;
+				height: 100%;
+			}
+			body {
+				margin: 0px;	
+			}
+		</style>
+	</head>
+	<body>
+		<!--TODO: Enter email! -->
+		<div>
+			<input id="email-field" type="text">Enter your email address...</input>
+			<button onclick="postEmail()">Send</button>
+			<div id="form-res">
+			</div>
+		</div>
+		<script>
+			// get email, make request, return result
+			let email;
+			function postEmail() {
+				//Get input
+				let field = document.getElementsByID('email-field');
+
+				// Form post request
+				let post = {
+					type: 'POST',
+					data: field.content,
+					route: 'subscriber/add'
+				}
+
+				// request, display response
+				fetch(post)
+					.then(res => res.json());
+					.then(res => {
+						if (res.code === 'Success') {
+							let resEl = document.getElementByID('form-res');
+							resEl.innerHTML = 'Thanks! You\'ll be hearing from us.';
+						} else if (res.code === 'Dupe') {
+							let resEl = document.getElementByID('form-res');
+							resEl.innerHTML = 'You are already subscribed!';
+						} else {
+							let resEl = document.getElementByID('form-res');
+							resEl.innerHTML = 'Something went wrong. Let us know and we will look into it!';
+						}
+					});
+			}
+		</script>
+	</body>
+</html>
