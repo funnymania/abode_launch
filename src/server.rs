@@ -202,8 +202,16 @@ impl Server {
                                                     content.1 = res;
                                                 }
                                                 Err(e) => {
-                                                    content.0 = String::from("Other");
-                                                    content.1 = e;
+                                                    match e.as_str() {
+                                                        "23505" => {
+                                                            content.0 = String::from("Dupe");
+                                                            content.1 = String::from("Email is already present! Thank you!");
+                                                        },
+                                                        _ => {
+                                                        content.0 = String::from("Other");
+                                                        content.1 = e;
+                                                        }
+                                                    }
                                                 }
                                             };
                                         }
@@ -405,7 +413,9 @@ impl Server {
             Ok(rows) => {
                 Ok(String::from("Success"))
             }
-            Err(e) => Err(format!("{}", e)),
+            Err(e) => {
+                Err(format!("{}", e.code().unwrap().code()))
+            }
         }
     }
 
