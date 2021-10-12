@@ -33,20 +33,18 @@
 			let email;
 			function postEmail() {
 				//Get input
-				let field = document.getElementByID('email-field');
+				let emailField = document.getElementById('email-field');
 
 				//Validate
-				if (field.content.length > 255) {
-					let resEl = document.getElementByID('form-res');
-					resEl.innerHTML = 'Email must be shorter than 256 characters';
-					return;
+				if (!validateEmail(emailField.value)) {
+					return;	
 				}
 
 				// Form post request
 				let post = {
 					method: 'POST',
-					body: JSON.stringify(field.content),
-					route: 'subscriber/add'
+					body: JSON.stringify(emailField.value),
+					route: 'subscriber'
 				}
 
 				// request, display response
@@ -54,16 +52,66 @@
 					.then(res => res.json())
 					.then(res => {
 						if (res.code === 'Success') {
-							let resEl = document.getElementByID('form-res');
+							let resEl = document.getElementById('form-res');
 							resEl.innerHTML = 'Thanks! You\'ll be hearing from us.';
 						} else if (res.code === 'Dupe') {
-							let resEl = document.getElementByID('form-res');
+							let resEl = document.getElementById('form-res');
 							resEl.innerHTML = 'You are already subscribed!';
-						} else {
-							let resEl = document.getElementByID('form-res');
-							resEl.innerHTML = 'Something went wrong. Let us know and we will look into it!';
+						} else if (res.code === 'Email Format') {
+							let resEl = document.getElementById('form-res');
+							resEl.innerHTML = res.msg;
 						}
 					});
+			}
+			
+			function validateEmail(email) {
+				let resEl = document.getElementById('form-res');
+				if (email.length > 255) {
+					resEl.innerHTML = 'Email must be shorter than 256 characters';
+					return false;
+				}
+
+				let emailParts = breakDownEmail(email);
+				console.log(emailParts);
+				if (emailParts.user === '' || emailParts.host === '' || emailParts.ext === '') {
+					resEl.innerHTML = 'Email must be in the proper format: you@example.com';
+					return false;
+				} 
+				
+				return true;	
+			}
+
+			function breakDownEmail(email) {
+				let parts = {
+					user: '',
+					host: '',
+					ext: '',
+				}
+
+				// split at char '@'
+				let foundAt = false;
+				let foundHost = false;
+				for (let ch of email) {
+					if (foundAt) {
+						if (foundHost) {
+							parts.ext += ch
+						} else {
+							if (ch === '.') {
+								foundHost = true;
+							} else {
+								parts.host += ch;
+							}
+						}
+					} else {
+						if (ch === '@') {
+							foundAt = true;
+						} else {
+							parts.user += ch;
+						}
+					}
+				}
+
+				return parts;
 			}
 		</script>
 	</body>

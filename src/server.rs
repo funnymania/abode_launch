@@ -191,13 +191,34 @@ impl Server {
                             stream.write(response.as_bytes()).unwrap();
                         }
                         "/subscriber" => {
-                            let mut content = String::new();
-                            println!("{:?}", req);
-                            // match Server::add_subscriber(&mut client) {
-                            //     Ok(res) => content = res,
-                            //     Err(e) => content = "Other".to_string(),
-                            // };
+                            let mut content = (String::new(), String::new());
+                            match Server::extract_body(&req) {
+                                Ok(body) => {
+                                    match Server::validate_email(&body) {
+                                        Ok(email) => {
+                                            match Server::add_subscriber(&mut client, email) {
+                                                Ok(res) => {
+                                                    content.0 = String::from("Success");
+                                                    content.1 = res;
+                                                }
+                                                Err(e) => {
+                                                    content.0 = String::from("Other");
+                                                    content.1 = e;
+                                                }
+                                            };
+                                        }
+                                        Err(msg) => {
+                                            content = msg;
+                                        }
+                                    }
+                                }
+                                Err(msg) => {
+                                    println!("{}", msg);
+                                    continue;
+                                },
+                            }
 
+                            let content = format!("{{\n\"code\": \"{}\",\n\"msg\": \"{}\"\n}}", content.0, content.1);
                             response = format!(
                                 "HTTP/1.1 200 OK\r\n\
                                 Content-Type: text/html\r\n\
@@ -375,7 +396,7 @@ impl Server {
         }
     }
 
-    pub fn add_subscriber<'a>(client: &mut postgres::Client, email: String) -> Result<String, String> {
+    pub fn add_subscriber<'a>(client: &mut postgres::Client, email: &str) -> Result<String, String> {
         //generate unique ID
         let uuid = &uuid::create()[..]; 
 
@@ -386,6 +407,71 @@ impl Server {
             }
             Err(e) => Err(format!("{}", e)),
         }
+    }
+
+    /// Get all data after a double newline (beginning of HTTP Body)
+    pub fn extract_body(req: &[u8]) -> Result<String, String> {
+        if req.len() == 0 {
+            return Err("Empty Result".to_string());
+        }
+
+        let mut body_found = false;
+        let mut body: Vec<u8> = Vec::new();
+        for i in 1..req.len() {
+            if !body_found {
+                if req[i] == 10 && req[i - 1] == 10 {
+                    body_found = true;
+                }
+            } else if req[i] != 0 {
+                body.push(req[i]); 
+            }
+        }
+
+        Ok(String::from_utf8(body).unwrap())
+    }
+
+    pub fn validate_email(email: &str) -> Result<&str, (String, String)> {
+        if email.len() > 255 {
+            return Err((String::from("Email Format"), String::from("Email must be shorter than 256 characters")));
+        }
+
+        let email_parts = Server::email_address_parts(email);
+        println!("email: {} {} {} {}", email, email_parts.0, email_parts.1, email_parts.2);
+        if email_parts.0 == "" || email_parts.1 == "" || email_parts.2 == "" {
+            return Err((String::from("Email Format"), String::from("Email must be in the proper format: you@example.com")));
+        } 
         
+        Ok(email)
+    }
+
+    pub fn email_address_parts(email: &str) -> (String, String, String) {
+        let mut user = String::new();
+        let mut host = String::new();
+        let mut ext = String::new();
+
+        // split at char '@'
+        let mut foundAt = false;
+        let mut foundHost = false;
+        for ch in email.chars() {
+            if foundAt {
+                if foundHost {
+                    ext += &ch.to_string()
+                } else {
+                    if ch == '.' {
+                        foundHost = true;
+                    } else {
+                        host += &ch.to_string();
+                    }
+                }
+            } else {
+                if ch == '@' {
+                    foundAt = true;
+                } else {
+                    user += &ch.to_string();
+                }
+            }
+        }
+
+        (user, host, ext)
     }
 }

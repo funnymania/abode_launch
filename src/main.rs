@@ -15,13 +15,13 @@ fn main() {
     if args.len() > 1 {
         match args[1].as_str() {
            "d" => {
-                Server::run(7565);
+                Server::run(PORT_DEV);
            }
            _ => {
-                Server::run(5657);
+                Server::run(PORT_PROD);
            }
         }
     } else {
-        Server::run(5657);
+        Server::run(PORT_PROD);
     }
 }
