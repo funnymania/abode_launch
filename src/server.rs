@@ -1,7 +1,7 @@
 extern crate postgres;
 use postgres::{Client, NoTls};
 
-use crate::uuid;
+use uuid::Uuid;
 use std::net::TcpListener;
 use std::io::Read;
 use std::io::Write;
@@ -398,9 +398,9 @@ impl Server {
 
     pub fn add_subscriber<'a>(client: &mut postgres::Client, email: &str) -> Result<String, String> {
         //generate unique ID
-        let uuid = &uuid::create()[..]; 
+        let uuid = &Uuid::new_v4();
 
-        let res = client.query("INSERT INTO subscribers VALUES($1, $2)", &[&uuid, &email]);
+        let res = client.query("INSERT INTO subscriber VALUES($1, $2)", &[&uuid, &email]);
         match res {
             Ok(rows) => {
                 Ok(String::from("Success"))
@@ -411,15 +411,15 @@ impl Server {
 
     /// Get all data after a double newline (beginning of HTTP Body)
     pub fn extract_body(req: &[u8]) -> Result<String, String> {
-        if req.len() == 0 {
+        if req.len() <= 3 {
             return Err("Empty Result".to_string());
         }
 
         let mut body_found = false;
         let mut body: Vec<u8> = Vec::new();
-        for i in 1..req.len() {
+        for i in 3..req.len() {
             if !body_found {
-                if req[i] == 10 && req[i - 1] == 10 {
+                if req[i] == 10 && req[i - 1] == 13 && req[i-2] == 10 && req[i - 1] == 13   {
                     body_found = true;
                 }
             } else if req[i] != 0 {
