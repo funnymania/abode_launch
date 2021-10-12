@@ -24,16 +24,24 @@
 		<!--TODO: Enter email! -->
 		<div>
 			<input id="email-field" type="text" placeholder="Enter your email address..."></input>
-			<button onclick="postEmail()">Send</button>
+			<button id="email-submit" onclick="postEmail()">Send</button>
 			<div id="form-res">
 			</div>
 		</div>
 		<script>
+			// Set up...
+			let emailField = document.getElementById('email-field');
+			emailField.addEventListener("keyup", function(event) {
+				if (event.keyCode === 13) {
+					document.getElementById('email-submit').click();
+				}
+			});
+
 			// get email, make request, return result
 			let email;
 			function postEmail() {
 				//Get input
-				let emailField = document.getElementById('email-field');
+				emailField = document.getElementById('email-field');
 
 				//Validate
 				if (!validateEmail(emailField.value)) {
