@@ -1,5 +1,6 @@
 extern crate postgres;
 use postgres::{Client, NoTls};
+use crate::email::Email;
 
 use uuid::Uuid;
 use std::net::TcpListener;
@@ -24,6 +25,9 @@ impl Server {
         let mut address = String::from("0.0.0.0:");
         address += &port.to_string();
         let listener = TcpListener::bind(&address).unwrap();
+
+        // Setup email information
+        let emailer = Email::new("Abode", "mcclureDmichael", "funnymania.lol");
 
         // Start postgres client
         let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
@@ -200,6 +204,9 @@ impl Server {
                                                 Ok(res) => {
                                                     content.0 = String::from("Success");
                                                     content.1 = res;
+
+                                                    //TODO: Send email!
+                                                    emailer.send_to(email);
                                                 }
                                                 Err(e) => {
                                                     match e.as_str() {

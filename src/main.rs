@@ -1,5 +1,7 @@
 mod server;
 mod uuid;
+mod email;
+mod personal_info;
 
 use server::Server;
 use std::env;
