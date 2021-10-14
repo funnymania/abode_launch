@@ -35,6 +35,8 @@ a {
 #splash-grid .two {
     grid-row: 2;
     grid-column: 2;
+	display: flex;
+	justify-content: center;
 }
 
 #splash-grid .three {
