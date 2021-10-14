@@ -23,40 +23,103 @@
 	<body>
 		<!--TODO: Enter email! -->
 		<div>
-			<input id="email-field" type="text">Enter your email address...</input>
-			<button onclick="postEmail()">Send</button>
+			<input id="email-field" type="text" placeholder="Enter your email address..."></input>
+			<button id="email-submit" onclick="postEmail()">Send</button>
 			<div id="form-res">
 			</div>
 		</div>
 		<script>
+			// Set up...
+			let emailField = document.getElementById('email-field');
+			emailField.addEventListener("keyup", function(event) {
+				if (event.keyCode === 13) {
+					document.getElementById('email-submit').click();
+				}
+			});
+
 			// get email, make request, return result
 			let email;
 			function postEmail() {
 				//Get input
-				let field = document.getElementsByID('email-field');
+				emailField = document.getElementById('email-field');
+
+				//Validate
+				if (!validateEmail(emailField.value)) {
+					return;	
+				}
 
 				// Form post request
 				let post = {
-					type: 'POST',
-					data: field.content,
-					route: 'subscriber/add'
+					method: 'POST',
+					body: emailField.value,
+					route: 'subscriber'
 				}
 
 				// request, display response
-				fetch(post)
-					.then(res => res.json());
+				fetch('subscriber', post)
+					.then(res => res.json())
 					.then(res => {
 						if (res.code === 'Success') {
-							let resEl = document.getElementByID('form-res');
+							let resEl = document.getElementById('form-res');
 							resEl.innerHTML = 'Thanks! You\'ll be hearing from us.';
 						} else if (res.code === 'Dupe') {
-							let resEl = document.getElementByID('form-res');
+							let resEl = document.getElementById('form-res');
 							resEl.innerHTML = 'You are already subscribed!';
-						} else {
-							let resEl = document.getElementByID('form-res');
-							resEl.innerHTML = 'Something went wrong. Let us know and we will look into it!';
+						} else if (res.code === 'Email Format') {
+							let resEl = document.getElementById('form-res');
+							resEl.innerHTML = res.msg;
 						}
 					});
+			}
+			
+			function validateEmail(email) {
+				let resEl = document.getElementById('form-res');
+				if (email.length > 255) {
+					resEl.innerHTML = 'Email must be shorter than 256 characters';
+					return false;
+				}
+
+				let emailParts = breakDownEmail(email);
+				console.log(emailParts);
+				if (emailParts.user === '' || emailParts.host === '' || emailParts.ext === '') {
+					resEl.innerHTML = 'Email must be in the proper format: you@example.com';
+					return false;
+				} 
+				
+				return true;	
+			}
+
+			function breakDownEmail(email) {
+				let parts = {
+					user: '',
+					host: '',
+					ext: '',
+				}
+
+				// split at char '@'
+				let foundAt = false;
+				let foundHost = false;
+				for (let ch of email) {
+					if (foundAt) {
+						if (foundHost) {
+							parts.ext += ch
+						} else {
+							if (ch === '.') {
+								foundHost = true;
+							} else {
+								parts.host += ch;
+							}
+						}
+					} else {
+						if (ch === '@') {
+							foundAt = true;
+						} else {
+							parts.user += ch;
+						}
+					}
+				}
+
+				return parts;
 			}
 		</script>
 	</body>

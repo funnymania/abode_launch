@@ -1,7 +1,8 @@
 extern crate postgres;
 use postgres::{Client, NoTls};
+use crate::email::Email;
 
-use std::net::TcpStream;
+use uuid::Uuid;
 use std::net::TcpListener;
 use std::io::Read;
 use std::io::Write;
@@ -24,6 +25,9 @@ impl Server {
         let mut address = String::from("0.0.0.0:");
         address += &port.to_string();
         let listener = TcpListener::bind(&address).unwrap();
+
+        // Setup email information
+        let emailer = Email::new("Abode", "mcclureDmichael", "funnymania.lol");
 
         // Start postgres client
         let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
@@ -119,6 +123,26 @@ impl Server {
                                 _ => ()
                             }
                         }
+                        "/subscribe" => {
+                            let content = match Server::get_page("/views/subscribe.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req)),
+                                _ => ()
+                            }
+                        }
+
                         "/why???" => {
                             let content = match Server::get_page("/views/why???.html") {
                                 Ok(html) => html,
@@ -168,6 +192,56 @@ impl Server {
                                 content.len(),
                                 content
                             );
+                            stream.write(response.as_bytes()).unwrap();
+                        }
+                        "/subscriber" => {
+                            let mut content = (String::new(), String::new());
+                            match Server::extract_body(&req) {
+                                Ok(body) => {
+                                    match Server::validate_email(&body) {
+                                        Ok(email) => {
+                                            match Server::add_subscriber(&mut client, email) {
+                                                Ok(res) => {
+                                                    content.0 = String::from("Success");
+                                                    content.1 = res;
+
+                                                    //TODO: Send email!
+                                                    emailer.send_to(email);
+                                                }
+                                                Err(e) => {
+                                                    match e.as_str() {
+                                                        "23505" => {
+                                                            content.0 = String::from("Dupe");
+                                                            content.1 = String::from("Email is already present! Thank you!");
+                                                        },
+                                                        _ => {
+                                                        content.0 = String::from("Other");
+                                                        content.1 = e;
+                                                        }
+                                                    }
+                                                }
+                                            };
+                                        }
+                                        Err(msg) => {
+                                            content = msg;
+                                        }
+                                    }
+                                }
+                                Err(msg) => {
+                                    println!("{}", msg);
+                                    continue;
+                                },
+                            }
+
+                            let content = format!("{{\n\"code\": \"{}\",\n\"msg\": \"{}\"\n}}", content.0, content.1);
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
                             stream.write(response.as_bytes()).unwrap();
                         }
                         // "abodeCLI" => {
@@ -335,5 +409,86 @@ impl Server {
         if contents.len() + req.len() < 4096 {
            file.write(req);
         }
+    }
+
+    pub fn add_subscriber<'a>(client: &mut postgres::Client, email: &str) -> Result<String, String> {
+        //generate unique ID
+        let uuid = &Uuid::new_v4();
+
+        let res = client.query("INSERT INTO subscriber VALUES($1, $2)", &[&uuid, &email]);
+        match res {
+            Ok(rows) => {
+                Ok(String::from("Success"))
+            }
+            Err(e) => {
+                Err(format!("{}", e.code().unwrap().code()))
+            }
+        }
+    }
+
+    /// Get all data after a double newline (beginning of HTTP Body)
+    pub fn extract_body(req: &[u8]) -> Result<String, String> {
+        if req.len() <= 3 {
+            return Err("Empty Result".to_string());
+        }
+
+        let mut body_found = false;
+        let mut body: Vec<u8> = Vec::new();
+        for i in 3..req.len() {
+            if !body_found {
+                if req[i] == 10 && req[i - 1] == 13 && req[i-2] == 10 && req[i - 1] == 13   {
+                    body_found = true;
+                }
+            } else if req[i] != 0 {
+                body.push(req[i]); 
+            }
+        }
+
+        Ok(String::from_utf8(body).unwrap())
+    }
+
+    pub fn validate_email(email: &str) -> Result<&str, (String, String)> {
+        if email.len() > 255 {
+            return Err((String::from("Email Format"), String::from("Email must be shorter than 256 characters")));
+        }
+
+        let email_parts = Server::email_address_parts(email);
+        println!("email: {} {} {} {}", email, email_parts.0, email_parts.1, email_parts.2);
+        if email_parts.0 == "" || email_parts.1 == "" || email_parts.2 == "" {
+            return Err((String::from("Email Format"), String::from("Email must be in the proper format: you@example.com")));
+        } 
+        
+        Ok(email)
+    }
+
+    pub fn email_address_parts(email: &str) -> (String, String, String) {
+        let mut user = String::new();
+        let mut host = String::new();
+        let mut ext = String::new();
+
+        // split at char '@'
+        let mut foundAt = false;
+        let mut foundHost = false;
+        for ch in email.chars() {
+            if foundAt {
+                if foundHost {
+                    ext += &ch.to_string()
+                } else {
+                    if ch == '.' {
+                        foundHost = true;
+                    } else {
+                        host += &ch.to_string();
+                    }
+                }
+            } else {
+                if ch == '@' {
+                    foundAt = true;
+                } else {
+                    user += &ch.to_string();
+                }
+            }
+        }
+
+        (user, host, ext)
     }
 }
