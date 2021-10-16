@@ -4,6 +4,11 @@ Webserver for Abode's launch page. Includes postgres support. Really fast.
 ## Development Build
 cargo run d
 
+## Dev + Email Feature
+cargo run --features email d
+
+Note that the 'd' argument must come _after_ FEATURE flag.
+
 ## Production Build
 cargo build --release
 
