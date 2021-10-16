@@ -13,4 +13,5 @@ uuid = { version = "0.8", features = ["v4"] }
 lettre = "0.10.0-rc.3"
 
 [features]
+default = []
 email = []
