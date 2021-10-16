@@ -17,7 +17,6 @@ impl Email {
         }
     }
 
-    //TODO: Send HTML
     pub fn send_to(&self, recipient: &str) {
         let from = format!("{} <{}@{}>", self.name, self.at, self.host);
         let to = format!("Friend <{}>", recipient);
@@ -37,8 +36,11 @@ impl Email {
             .credentials(creds)
             .build(); 
         
-        // let mailer = SmtpTransport::unencrypted_localhost();
-        assert!(mailer.send(&email).is_ok());
+        match mailer.send(&email) {
+            Ok(_) => println!("Email to {}: Success", recipient),
+            Err(msg) => println!("Email failed to send: {:?}", msg)
+        }
+        // assert!(mailer.send(&email).is_ok());
     }
 }
 
