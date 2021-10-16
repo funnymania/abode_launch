@@ -2,6 +2,7 @@ mod server;
 mod uuid;
 #[cfg(feature = "email")]
 mod email;
+#[cfg(feature = "email")]
 mod personal_info;
 
 use server::Server;
