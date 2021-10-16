@@ -17,7 +17,6 @@ fn main() {
     // 'd' signifies dev, and we use a different port. 
     let args: Vec<String> = env::args().collect(); 
     if args.len() > 1 {
-        println!("{}", args[1]);
         match args[1].as_str() {
            "d" => {
                 Server::run(PORT_DEV);

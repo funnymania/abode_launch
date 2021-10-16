@@ -37,6 +37,7 @@ impl Server {
         // open Log file
         let mut log_file = Server::tail_file().unwrap();
 
+        //TODO: use sub-domain for APIs
         for stream in listener.incoming() {
             println!("Got one!");
             
