@@ -1,5 +1,6 @@
 extern crate postgres;
 use postgres::{Client, NoTls};
+#[cfg(feature = "email")]
 use crate::email::Email;
 
 use uuid::Uuid;
@@ -27,6 +28,7 @@ impl Server {
         let listener = TcpListener::bind(&address).unwrap();
 
         // Setup email information
+        #[cfg(feature = "email")]
         let emailer = Email::new("Abode", "mcclureDmichael", "funnymania.lol");
 
         // Start postgres client
@@ -205,7 +207,7 @@ impl Server {
                                                     content.0 = String::from("Success");
                                                     content.1 = res;
 
-                                                    //TODO: Send email!
+                                                    #[cfg(feature = "email")]
                                                     emailer.send_to(email);
                                                 }
                                                 Err(e) => {

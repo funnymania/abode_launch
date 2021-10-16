@@ -1,5 +1,6 @@
 mod server;
 mod uuid;
+#[cfg(feature = "email")]
 mod email;
 mod personal_info;
 
