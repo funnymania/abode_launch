@@ -37,7 +37,6 @@ impl Server {
         // open Log file
         let mut log_file = Server::tail_file().unwrap();
 
-        //TODO: use sub-domain for APIs
         for stream in listener.incoming() {
             println!("Got one!");
             
@@ -264,6 +263,27 @@ impl Server {
                         //     }
                         // }
                         _ => {
+                            // ApiString struct
+                            // TODO: Consideration for PUT, GET, POST
+                            let api_str = Server::is_valid_api(&str_req);
+                            match api_str {
+                                Some(api_call) => {
+                                    match api_str.version {
+                                        "v1" => {
+                                            // get user by ID
+                                            match api_str.value[0] {
+                                                "user" => {
+                                                    let user = Server::to_json(Server::get_user(&api_str.value[1]));
+                                                    
+                                                    //TODO Send response
+                                                }
+                                            }
+
+                                        }
+                                        _ => {}
+                                    }
+                                },
+                                None => {
                             match Server::get_extension(&str_req) {
                                 Ok(ext) => {
                                     let mut content = Vec::new();
@@ -316,6 +336,10 @@ impl Server {
 
                                 }
                             }
+                                    
+                                }
+                            }
+
                         }
                     }
                 }
