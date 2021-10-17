@@ -4,12 +4,19 @@ use postgres::{Client, NoTls};
 use crate::email::Email;
 
 use uuid::Uuid;
+use json::{parse, object};
+
 use std::net::TcpListener;
 use std::io::Read;
 use std::io::Write;
 use std::thread;
 use std::io;
 use std::fs;
+
+pub struct ApiString {
+    version: String,
+    value: Vec<String>
+}
 
 pub struct Server {
     name: String,
@@ -269,14 +276,20 @@ impl Server {
                                 Some(api_call) => {
                                     match api_str.version {
                                         "v1" => {
-                                            // get user by ID
+                                            // get user by ID [/user/[uuid]/]
                                             match api_str.value[0] {
                                                 "user" => {
                                                     match str_req.0 {
                                                         "GET" => {
-                                                            let user = Server::to_json(Server::get_user(&api_str.value[1]));
+                                                            let user = match Server::get_user(&api_str.value[1]) {
+                                                                Ok(user) => {
+                                                                    Server::to_json(user)
+                                                                }
+                                                                Err(msg) => {
+                                                                    Server::to_json(msg)
+                                                                }
+                                                            };
                                                             
-                                                            //TODO Send response
                                                             let content = format!("{{\n\"user\": {{\n \"name\": \"{}\"\n}\n}}", user.0);
                                                             response = format!(
                                                                 "HTTP/1.1 200 OK\r\n\
@@ -291,9 +304,8 @@ impl Server {
                                                         "POST" => {
                                                             match Server::extract_body(&req) {
                                                                 Ok(body) => {
-                                                                    let result = Server::update_user(&body);
                                                                     let mut content = String::new();
-                                                                    match result {
+                                                                    match Server::update_user(&body, &api_str.value[1]) {
                                                                         Ok(user) => {
                                                                             content = format!("{{\n\"user\": {{\n \"name\": \"{}\"\n}\n}}", user.0);
                                                                         }
@@ -301,6 +313,7 @@ impl Server {
                                                                             content = format!("{{\n\"error\": \"{}\"}}", msg);
                                                                         }
                                                                     }
+                                                                    
                                                                     response = format!(
                                                                         "HTTP/1.1 200 OK\r\n\
                                                                         Content-Type: text/html\r\n\
@@ -561,9 +574,32 @@ impl Server {
         (user, host, ext)
     }
 
-    pub fn update_user(json_user: &str) -> Result<(), String> {
-        //TODO Convert JSON arg to searchable fields
+    pub fn update_user(json_user: &str, uid: uuid::Uuid) -> Result<json::JsonValue, String> {
+        let user_obj = json::parse(json_user);
 
-        //TODO Update record.
+        let res = client.query("UPDATE subscriber AS updated SET name = {} WHERE id = {} RETURNING updated", 
+                               &[&user_obj["name"], &uid]);
+
+        match res {
+            Ok(rows) => {
+                if rows.len() == 0 {
+                   Err("UserId not found") 
+                } else {
+                    object!{
+                        user: {
+                            name: rows[0].get("name")
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                Err(format!("{}", e.code().unwrap().code()))
+            }
+        }
+
+    }
+
+    pub fn is_valid_api(path: &str) -> Option<ApiString> {
+        //TODO: Return ApiString if it is an api call, otherwise None
     }
 }
