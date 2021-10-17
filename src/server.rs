@@ -59,8 +59,8 @@ impl Server {
 
                     println!("Byte of reqs: {}", bytes_read);
                     let str_req = Server::whats_reqd(String::from_utf8_lossy(&req).to_string());
-                    println!("Path: {}", str_req);
-                    match str_req.as_str() {
+                    println!("Path: {}", str_req.1);
+                    match str_req.1.as_str() {
                         "/" | "/wuh???" => {
                             let content = match Server::get_page("/views/landing.html") {
                                 Ok(html) => html,
@@ -264,8 +264,7 @@ impl Server {
                         // }
                         _ => {
                             // ApiString struct
-                            // TODO: Consideration for PUT, GET, POST
-                            let api_str = Server::is_valid_api(&str_req);
+                            let api_str = Server::is_valid_api(&str_req.1);
                             match api_str {
                                 Some(api_call) => {
                                     match api_str.version {
@@ -273,9 +272,49 @@ impl Server {
                                             // get user by ID
                                             match api_str.value[0] {
                                                 "user" => {
-                                                    let user = Server::to_json(Server::get_user(&api_str.value[1]));
-                                                    
-                                                    //TODO Send response
+                                                    match str_req.0 {
+                                                        "GET" => {
+                                                            let user = Server::to_json(Server::get_user(&api_str.value[1]));
+                                                            
+                                                            //TODO Send response
+                                                            let content = format!("{{\n\"user\": {{\n \"name\": \"{}\"\n}\n}}", user.0);
+                                                            response = format!(
+                                                                "HTTP/1.1 200 OK\r\n\
+                                                                Content-Type: text/html\r\n\
+                                                                Content-Length: {}\r\n\r\n{}",
+                                                                content.len(),
+                                                                content
+                                                            );
+
+                                                            stream.write(response.as_bytes()).unwrap();
+                                                        }
+                                                        "POST" => {
+                                                            match Server::extract_body(&req) {
+                                                                Ok(body) => {
+                                                                    let result = Server::update_user(&body);
+                                                                    let mut content = String::new();
+                                                                    match result {
+                                                                        Ok(user) => {
+                                                                            content = format!("{{\n\"user\": {{\n \"name\": \"{}\"\n}\n}}", user.0);
+                                                                        }
+                                                                        Err(msg) => {
+                                                                            content = format!("{{\n\"error\": \"{}\"}}", msg);
+                                                                        }
+                                                                    }
+                                                                    response = format!(
+                                                                        "HTTP/1.1 200 OK\r\n\
+                                                                        Content-Type: text/html\r\n\
+                                                                        Content-Length: {}\r\n\r\n{}",
+                                                                        content.len(),
+                                                                        content
+                                                                    );
+
+                                                                    stream.write(response.as_bytes()).unwrap();
+                                                                }
+                                                                Err(msg) => {}
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -284,14 +323,14 @@ impl Server {
                                     }
                                 },
                                 None => {
-                            match Server::get_extension(&str_req) {
+                            match Server::get_extension(&str_req.1) {
                                 Ok(ext) => {
                                     let mut content = Vec::new();
                                     match ext {
                                         //TODO: Consider stripping evil things like '../..' from
                                         // the requested resource.
                                         "svg" => {
-                                            match Server::get_file(format!("/rsrcs/{}",  str_req).as_str()) {
+                                            match Server::get_file(format!("/rsrcs/{}",  str_req.1).as_str()) {
                                                 Ok(mut svg) => {
                                                     svg.read_to_end(&mut content);
                                                 }
@@ -370,15 +409,18 @@ impl Server {
         file
     }
 
-    pub fn whats_reqd(req: String) -> String {
+    pub fn whats_reqd(req: String) -> (String, String) {
         let mut lines: Vec<&str> = req.lines().collect();
         let first_line: Vec<&str> = lines[0].split(" ").collect();
         match first_line[0] {
             "GET" => {
-                String::from(first_line[1])
+                (String::from("GET"), String::from(first_line[1]))
             }
             "POST" => {
-                String::from(first_line[1])
+                (String::from("POST"), String::from(first_line[1]))
+            }
+            "PUT" => {
+                (String::from("PUT"), String::from(first_line[1]))
             }
             _ => {
                 if first_line.len() < 2 {
@@ -517,5 +559,11 @@ impl Server {
         }
 
         (user, host, ext)
+    }
+
+    pub fn update_user(json_user: &str) -> Result<(), String> {
+        //TODO Convert JSON arg to searchable fields
+
+        //TODO Update record.
     }
 }
