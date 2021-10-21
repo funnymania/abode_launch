@@ -685,16 +685,22 @@ impl Server {
         client: &mut postgres::Client,
         uid: uuid::Uuid,
     ) -> Result<json::JsonValue, json::JsonValue> {
-        let res = client.query("SELECT * FROM user WHERE id = $1", &[&uid]);
+        let res = client.query("SELECT * FROM users WHERE id = $1", &[&uid]);
         match res {
-            Ok(rows) => Ok(object! {
-                user: {
-                    name: rows[0].get::<&str, String>("name")
+            Ok(rows) => {
+                if rows.len() == 0 {
+                    Err(object! {
+                        error: "UserId not found".to_string()
+                    })
+                } else {
+                    Ok(object! {
+                        user: {
+                            name: rows[0].get::<&str, String>("name")
+                        }
+                    })
                 }
-            }),
-            Err(e) => Err(object! {
-               error: format!("{}", e)
-            }),
+            }
+            Err(e) => Err(object! {error: e.code().unwrap().code()}),
         }
     }
 
@@ -704,30 +710,29 @@ impl Server {
         uid: uuid::Uuid,
     ) -> Result<json::JsonValue, json::JsonValue> {
         let user_obj = json::parse(json_user).unwrap();
-        match &user_obj["user"]["name"] {
-            json::JsonValue::String(field) => {
-                let res = client.query(
-                    "UPDATE user AS updated SET name = $1 WHERE id = $2 RETURNING updated",
-                    &[&field, &uid],
-                );
-                match res {
-                    Ok(rows) => {
-                        if rows.len() == 0 {
-                            Err(object! {
-                                error: "UserId not found".to_string()
-                            })
-                        } else {
-                            Ok(object! {
-                                user: {
-                                    name: rows[0].get::<&str, String>("name")
-                                }
-                            })
-                        }
+        if user_obj["user"]["name"].is_string() {
+            let res = client.query(
+                "UPDATE users AS updated SET name = $1 WHERE id = $2 RETURNING updated",
+                &[&user_obj["user"]["name"].dump(), &uid],
+            );
+            match res {
+                Ok(rows) => {
+                    if rows.len() == 0 {
+                        Err(object! {
+                            error: "UserId not found".to_string()
+                        })
+                    } else {
+                        Ok(object! {
+                            user: {
+                                name: rows[0].get::<&str, String>("name")
+                            }
+                        })
                     }
-                    Err(e) => Err(object! {error: e.code().unwrap().code()}),
                 }
+                Err(e) => Err(object! {error: e.code().unwrap().code()}),
             }
-            _ => Err(object! {error: String::from("'Name' field must be a string")}),
+        } else {
+            Err(object! {error: String::from("'Name' field must be a string")})
         }
     }
 
@@ -738,7 +743,7 @@ impl Server {
         let mut uid = Uuid::new_v4();
         loop {
             if client
-                .query("SELECT * FROM user WHERE id = $1", &[&uid])
+                .query("SELECT * FROM users WHERE id = $1", &[&uid])
                 .unwrap()
                 .len()
                 == 1
@@ -751,31 +756,34 @@ impl Server {
         }
 
         let user_obj = json::parse(json_user).unwrap();
-        match &user_obj["user"]["name"] {
-            json::JsonValue::String(field) => {
-                let res = client.query(
-                    "INSERT INTO user AS updated (id, name) VALUES ($1, $2) RETURNING updated",
-                    &[&uid, &field],
-                );
-                match res {
-                    Ok(rows) => {
-                        if rows.len() == 0 {
-                            Err(object! {
-                                error: "UserId already exists.".to_string()
-                            })
-                        } else {
-                            Ok(object! {
-                                user: {
-                                    id: rows[0].get::<&str, String>("id"),
-                                    name: rows[0].get::<&str, String>("name")
-                                }
-                            })
-                        }
+        let name_plain = user_obj["user"]["name"].as_str();
+        if name_plain == None {
+            return Err(object! {error: String::from("'Name' field must be a string")});
+        }
+
+        if user_obj["user"]["name"].is_string() {
+            let res = client.query(
+                "INSERT INTO users (id, name) VALUES ($1, $2) RETURNING *",
+                &[&uid, &name_plain],
+            );
+            match res {
+                Ok(rows) => {
+                    if rows.len() == 0 {
+                        Err(object! {
+                            error: "UserId not found".to_string()
+                        })
+                    } else {
+                        Ok(object! {
+                            user: {
+                                name: rows[0].get::<&str, String>("name")
+                            }
+                        })
                     }
-                    Err(e) => Err(object! {error: e.code().unwrap().code()}),
                 }
+                Err(e) => Err(object! {error: e.code().unwrap().code()}),
             }
-            _ => Err(object! {error: String::from("'Name' field must be a string")}),
+        } else {
+            Err(object! {error: String::from("'Name' field must be a string")})
         }
     }
 
@@ -842,16 +850,30 @@ mod test {
         let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
 
         // Remove test_tables
-        client.execute("DROP TABLE test_users", &[]);
+        client.execute("DROP TABLE users", &[]);
 
         // Create create test_tables
-        client.execute("CREATE TABLE test_users (id uuid, name varchar(255))", &[]);
+        client.execute(
+            "CREATE TABLE users (id uuid PRIMARY KEY, name varchar(255))",
+            &[],
+        );
 
         client
     }
 
+    #[test]
     fn insert() {
-        let client = setup();
+        let mut client = setup();
+
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+        match Server::insert_user(&mut client, json_user) {
+            Ok(result) => {
+                assert_eq!(result["user"]["name"].as_str().unwrap(), "Kurt");
+            }
+            Err(e) => {
+                panic!("{}", e)
+            }
+        }
     }
 
     #[test]
@@ -872,13 +894,32 @@ mod test {
                 );
             }
             _ => {
-                //fail the test
+                panic!("UserID 00000000-0000-0000-0000-000000000000 should not be found.")
             }
         }
     }
 
+    #[test]
     fn select_id_not_found() {
         let mut client = setup();
+
+        let uid = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
+
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+
+        match Server::get_user(&mut client, uid) {
+            Err(result) => {
+                assert_eq!(
+                    result,
+                    object! {
+                        error: "UserId not found".to_string()
+                    }
+                );
+            }
+            _ => {
+                panic!("UserID 00000000-0000-0000-0000-000000000000 should not be found.")
+            }
+        }
     }
 
     fn select_user() {}
