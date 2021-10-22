@@ -695,6 +695,7 @@ impl Server {
                 } else {
                     Ok(object! {
                         user: {
+                            id: rows[0].get::<&str, Uuid>("id").to_simple().to_string(),
                             name: rows[0].get::<&str, String>("name")
                         }
                     })
@@ -710,10 +711,15 @@ impl Server {
         uid: uuid::Uuid,
     ) -> Result<json::JsonValue, json::JsonValue> {
         let user_obj = json::parse(json_user).unwrap();
+        let name_plain = user_obj["user"]["name"].as_str();
+        if name_plain == None {
+            return Err(object! {error: String::from("'Name' field must be a string")});
+        }
+
         if user_obj["user"]["name"].is_string() {
             let res = client.query(
-                "UPDATE users AS updated SET name = $1 WHERE id = $2 RETURNING updated",
-                &[&user_obj["user"]["name"].dump(), &uid],
+                "UPDATE users SET name = $1 WHERE id = $2 RETURNING *",
+                &[&name_plain, &uid],
             );
             match res {
                 Ok(rows) => {
@@ -722,8 +728,10 @@ impl Server {
                             error: "UserId not found".to_string()
                         })
                     } else {
+                        println!("{:?}", rows[0]);
                         Ok(object! {
                             user: {
+                                id: rows[0].get::<&str, Uuid>("id").to_simple().to_string(),
                                 name: rows[0].get::<&str, String>("name")
                             }
                         })
@@ -775,6 +783,7 @@ impl Server {
                     } else {
                         Ok(object! {
                             user: {
+                                id: rows[0].get::<&str, Uuid>("id").to_simple().to_string(),
                                 name: rows[0].get::<&str, String>("name")
                             }
                         })
@@ -922,7 +931,60 @@ mod test {
         }
     }
 
-    fn select_user() {}
+    #[test]
+    fn select_user() {
+        // Insert user.
+        let mut client = setup();
 
-    fn update_user() {}
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+
+        // Query for that user.
+        match Server::insert_user(&mut client, json_user) {
+            Ok(result) => {
+                let uid = Uuid::parse_str(result["user"]["id"].as_str().unwrap()).unwrap();
+                match Server::get_user(&mut client, uid) {
+                    Ok(user) => {
+                        assert_eq!(
+                            user["user"]["id"].as_str().unwrap(),
+                            uid.to_simple().to_string()
+                        );
+                        assert_eq!(user["user"]["name"], result["user"]["name"]);
+                    }
+                    Err(e) => panic!("{}", e),
+                }
+            }
+            Err(e) => {
+                panic!("{}", e)
+            }
+        }
+    }
+
+    #[test]
+    fn update_user() {
+        // Insert user.
+        let mut client = setup();
+
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+
+        // Query for that user.
+        match Server::insert_user(&mut client, json_user) {
+            Ok(result) => {
+                let uid = Uuid::parse_str(result["user"]["id"].as_str().unwrap()).unwrap();
+                let changed_user = "{ \"user\": { \"name\": \"Cheri\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+                match Server::update_user(&mut client, json_user, uid) {
+                    Ok(user) => {
+                        assert_eq!(
+                            user["user"]["id"].as_str().unwrap(),
+                            uid.to_simple().to_string()
+                        );
+                        assert_eq!(user["user"]["name"], result["user"]["name"]);
+                    }
+                    Err(e) => panic!("{}", e),
+                }
+            }
+            Err(e) => {
+                panic!("{}", e)
+            }
+        }
+    }
 }
