@@ -158,17 +158,6 @@ impl Server {
                                 _ => (),
                             }
                         }
-                        "/login" => {
-                            //TODO: Keep the identifier (CID), identity (UID), passwords,
-                            //login-token. can create separate ID for some service which carries
-                            //over Real-Info on the backend. Users may also want to spontaneously
-                            //create an id out of nowhere for some purpose.
-                            //TODO: HTTPS
-                            //TODO: Get a big FAT list of all the things with a user (clothing
-                            //stores, preferences (twitter))
-                            //TODO: ingest logins, create session data, pass token back to user
-                            //device.
-                        }
                         "/login-page" => {
                             let content = match Server::get_page("/views/login.html") {
                                 Ok(html) => html,
