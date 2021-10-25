@@ -158,6 +158,38 @@ impl Server {
                                 _ => (),
                             }
                         }
+                        "/login" => {
+                            //TODO: Keep the identifier (CID), identity (UID), passwords,
+                            //login-token. can create separate ID for some service which carries
+                            //over Real-Info on the backend. Users may also want to spontaneously
+                            //create an id out of nowhere for some purpose.
+                            //TODO: HTTPS
+                            //TODO: Get a big FAT list of all the things with a user (clothing
+                            //stores, preferences (twitter))
+                            //TODO: ingest logins, create session data, pass token back to user
+                            //device.
+                        }
+                        "/login-page" => {
+                            let content = match Server::get_page("/views/login.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                            response = format!(
+                                "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                content.len(),
+                                content
+                            );
+
+                            match stream.write(response.as_bytes()) {
+                                Err(msg) => {
+                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                                }
+                                _ => (),
+                            }
+                        }
                         "/subscribe" => {
                             let content = match Server::get_page("/views/subscribe.html") {
                                 Ok(html) => html,
@@ -415,6 +447,45 @@ impl Server {
                                                             }
                                                             Err(msg) => {}
                                                         },
+                                                        _ => {}
+                                                    }
+                                                }
+                                                "token" => {
+                                                    match str_req.0.as_str() {
+                                                        "POST" => {
+                                                            match Server::extract_body(&req) {
+                                                                Ok(body) => {
+                                                                    let mut token = String::new();
+                                                                    let mut content =
+                                                                        match Server::authenticate_user(
+                                                                            &mut client,
+                                                                            &body,
+                                                                        ) {
+                                                                            Ok(user) => {
+                                                                                token = user.1;
+                                                                                user.0
+                                                                            }
+                                                                            Err(msg) => msg,
+                                                                        };
+
+                                                                    //TODO: what if user has cookies off?
+                                                                    response = format!(
+                                                                        "HTTP/1.1 201 Created\r\n\
+                                                                        Set-Cookie: token={}; Expires=Tue, 19 Jan 2038;  Secure; HttpOnly\r\n
+                                                                        Content-Type: text/html\r\n\
+                                                                        Content-Length: {}\r\n\r\n{}",
+                                                                        token,
+                                                                        content.len(),
+                                                                        content
+                                                                    );
+
+                                                                    stream
+                                                                        .write(response.as_bytes())
+                                                                        .unwrap();
+                                                                }
+                                                                Err(e) => {}
+                                                            }
+                                                        }
                                                         _ => {}
                                                     }
                                                 }
@@ -845,6 +916,83 @@ impl Server {
             Ok(_) => true,
             _ => false,
         }
+    }
+
+    //TODO: Multi-device login
+    pub fn authenticate_user(
+        client: &mut postgres::Client,
+        body: &str,
+    ) -> Result<(json::JsonValue, String), json::JsonValue> {
+        //      Extract pass, hash it
+        let user_obj = json::parse(body).unwrap();
+        let name_plain = user_obj["user"]["name"].as_str();
+        if name_plain == None {
+            return Err(object! {error: String::from("'Name' field must be a string")});
+        }
+
+        let pass_plain = user_obj["user"]["pass"].as_str();
+        if pass_plain == None {
+            return Err(object! {error: String::from("'Password' is in an invalid format")});
+        }
+
+        let hashed_pass = Server::hash(pass_plain.unwrap());
+
+        if user_obj["user"]["name"].is_string() && user_obj["user"]["pass"].is_string() {
+            //      Select user if they match
+            let res = client.query(
+                "SELECT * from user WHERE name = $1 AND pass = $2",
+                &[&name_plain, &hashed_pass],
+            );
+
+            match res {
+                Ok(rows) => {
+                    if rows.len() == 0 {
+                        Err(object! {
+                            error: "User and pass not found. Try again.".to_string()
+                        })
+                    } else {
+                        let uid = rows[0].get::<&str, Uuid>("id").to_simple().to_string();
+                        let other_logins =
+                            client.query("SELECT * FROM user_device WHERE uid = $1", &[&uid]);
+                        match other_logins {
+                            Ok(token_rows) => {
+                                let new_id = Uuid::new_v4();
+                                //TODO: Default ID (unknown), 1 = iphone, 2 = android, 3 = mac,
+                                //4 = linux, 5 = windows
+                                let new_sess_token = Uuid::new_v4();
+                                let insert_res = client.query("INSERT INTO user_device (uid, id, device_type, sess_token, sess_date) VALUES ($1, $2, $3, $4, now) RETURNING *", &[&uid, &new_id, &new_sess_token]);
+                                match insert_res {
+                                    Ok(rows) => Ok((
+                                        object! {
+                                            user: {
+                                                id: rows[0].get::<&str, Uuid>("id").to_simple().to_string(),
+                                                name: rows[0].get::<&str, String>("name")
+                                            }
+                                        },
+                                        new_sess_token.to_string(),
+                                    )),
+                                    Err(e) => Err(object! {
+                                        error: "Could not authenticate user".to_string()
+                                    }),
+                                }
+                            }
+                            Err(e) => Err(object! {
+                                error: "Could not authenticate user".to_string()
+                            }),
+                        }
+                    }
+                }
+                Err(e) => Err(object! {error: e.code().unwrap().code()}),
+            }
+        } else {
+            Err(object! {error: String::from("'Name' field must be a string")})
+        }
+    }
+
+    pub fn hash(browns: &str) -> String {
+        let result = String::new();
+
+        result
     }
 }
 
