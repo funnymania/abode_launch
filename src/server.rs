@@ -67,7 +67,15 @@ impl Server {
         for stream in listener.incoming() {
             println!("Got one!");
 
+            let acceptor = acceptor.clone();
+            thread::spawn(move || {
+                let stream = acceptor.accept(stream.unwrap()).unwrap();
+                handle_request(stream);
+            }
             let mut stream = stream.unwrap();
+
+            //TODO: If HTTPS feature enabled.
+
             //Browser extensions CRAM a lot of extra data into the cookie header.
             //It is not an Error for this buffer to be too small, so we won't catch it
             let mut req = [0; 2048];
