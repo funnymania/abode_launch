@@ -4,6 +4,7 @@ use crate::email::Email;
 use postgres::{Client, NoTls};
 
 use json::{object, parse};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use uuid::Uuid;
 
 use std::fs;
@@ -11,6 +12,7 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpListener;
+use std::sync::Arc;
 use std::thread;
 
 pub struct ApiString {
@@ -44,6 +46,24 @@ impl Server {
         // open Log file
         let mut log_file = Server::tail_file().unwrap();
 
+        // TODO: Move to an unshared config file
+        let mut ssl_key = format!("{}", env!("CARGO_MANIFEST_DIR"));
+        ssl_key += "/keys/privkey.pem";
+
+        let mut ssl_chain = format!("{}", env!("CARGO_MANIFEST_DIR"));
+        ssl_chain += "/keys/fullchain.pem";
+
+        // Prep SSL Stream
+        let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+        acceptor
+            .set_private_key_file(ssl_key.as_str(), SslFiletype::PEM)
+            .unwrap();
+        acceptor
+            .set_certificate_chain_file(ssl_chain.as_str())
+            .unwrap();
+        acceptor.check_private_key().unwrap();
+        let acceptor = Arc::new(acceptor.build());
+
         for stream in listener.incoming() {
             println!("Got one!");
 
@@ -65,6 +85,7 @@ impl Server {
                     }
 
                     println!("Byte of reqs: {}", bytes_read);
+                    println!("{:?}", req);
 
                     // 404 users if they send any non-utf8 data in request
                     let mut check_req = String::new();
