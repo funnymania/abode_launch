@@ -3,3 +3,4 @@
 /src/personal_info.rs
 /logs/*.txt
 *.swp
+/keys
