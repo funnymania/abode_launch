@@ -3,7 +3,7 @@ extern crate postgres;
 use crate::email::Email;
 use postgres::{Client, NoTls};
 
-use json::{object, parse};
+use json::object;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use uuid::Uuid;
 
@@ -11,8 +11,8 @@ use std::fs;
 use std::io;
 use std::io::Read;
 use std::io::Write;
-use std::net::TcpListener;
-use std::sync::Arc;
+use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 pub struct ApiString {
@@ -31,22 +31,543 @@ impl Server {
         }
     }
 
-    pub fn run(port: u64) {
-        let mut address = String::from("0.0.0.0:");
-        address += &port.to_string();
-        let listener = TcpListener::bind(&address).unwrap();
-
+    pub fn handle_https<T: Read + Write>(
+        mut stream: T,
+        log_file: Arc<fs::File>,
+        mut client: Arc<Mutex<postgres::Client>>,
+    ) {
         // Setup email information
         #[cfg(feature = "email")]
         let emailer = Email::new("Abode", "mcclureDmichael", "funnymania.lol");
 
+        //Browser extensions CRAM a lot of extra data into the cookie header.
+        //It is not an Error for this buffer to be too small, so we won't catch it
+        let mut req = [0; 2048];
+
+        // Split to different actions
+        let mut response = String::new();
+        match stream.read(&mut req) {
+            Err(msg) => println!("Stream read error {}", msg),
+            Ok(bytes_read) => {
+                println!("Byte of reqs: {}", bytes_read);
+
+                // If the requests contain a lot of data, we will log it, because we are curious how
+                // people are requesting, and then skip it.
+                if bytes_read > 1024 {
+                    Server::add_to_file(&log_file, &req);
+                    return;
+                }
+
+                // 404 users if they send any non-utf8 data in request
+                let mut check_req = String::new();
+                match std::str::from_utf8(&req) {
+                    Ok(checked_req) => check_req = checked_req.to_string(),
+                    Err(e) => {
+                        let content = match Server::get_page("/views/whats-that.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                        response = format!(
+                            "HTTP/1.1 404 Not Found\r\n\
+                            Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        stream.write_all(response.as_bytes()).unwrap();
+                        return;
+                    }
+                }
+
+                let str_req = Server::whats_reqd(check_req);
+                println!("Path: {}", str_req.1);
+                match str_req.1.as_str() {
+                    "/" | "/wuh???" => {
+                        let content = match Server::get_page("/views/landing.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            Ok(num) => (),
+                        }
+                    }
+                    "/favicon.ico" => {
+                        let mut content = Vec::new();
+                        match Server::get_file("/rsrcs/favicon.png") {
+                            Ok(mut icon) => {
+                                icon.read_to_end(&mut content);
+                            }
+                            Err(e) => {
+                                format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                            }
+                        };
+                        println!("Icon bytes read: {}", content.len());
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: image/png\r\n\
+                                Content-Length: {}\r\n\r\n",
+                            content.len(),
+                        );
+                        let mut byte_res: Vec<u8> = Vec::new();
+                        for byte in response.as_bytes() {
+                            byte_res.push(*byte);
+                        }
+
+                        for byte in content {
+                            byte_res.push(byte);
+                        }
+
+                        stream.write_all(&byte_res).unwrap();
+                    }
+                    "/global.css" => {
+                        let content = match Server::get_page("/rsrcs/global.css") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/css\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+                    }
+                    "/login-page" => {
+                        let content = match Server::get_page("/views/login.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+                    }
+                    "/subscribe" => {
+                        let content = match Server::get_page("/views/subscribe.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+                    }
+
+                    "/why???" => {
+                        let content = match Server::get_page("/views/why???.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+                    }
+                    "/pre-release" => {
+                        let content = match Server::get_page("/views/pre-release.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+                    }
+                    "/installs" => {
+                        let mut content = String::new();
+                        match Server::get_installs(&mut client) {
+                            Ok(num) => content = num.to_string(),
+                            Err(e) => content = "0".to_string(),
+                        };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+                        stream.write_all(response.as_bytes()).unwrap();
+                    }
+                    "/subscriber" => {
+                        let mut content = (String::new(), String::new());
+                        match Server::extract_body(&req) {
+                            Ok(body) => match Server::validate_email(&body) {
+                                Ok(email) => {
+                                    match Server::add_subscriber(&mut client, email) {
+                                        Ok(res) => {
+                                            content.0 = String::from("Success");
+                                            content.1 = res;
+
+                                            #[cfg(feature = "email")]
+                                            emailer.send_to(email);
+                                        }
+                                        Err(e) => match e.as_str() {
+                                            "23505" => {
+                                                content.0 = String::from("Dupe");
+                                                content.1 = String::from(
+                                                    "Email is already present! Thank you!",
+                                                );
+                                            }
+                                            _ => {
+                                                content.0 = String::from("Other");
+                                                content.1 = e;
+                                            }
+                                        },
+                                    };
+                                }
+                                Err(msg) => {
+                                    content = msg;
+                                }
+                            },
+                            Err(msg) => {
+                                println!("{}", msg);
+                                return;
+                            }
+                        }
+
+                        let content = format!(
+                            "{{\n\"code\": \"{}\",\n\"msg\": \"{}\"\n}}",
+                            content.0, content.1
+                        );
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        stream.write_all(response.as_bytes()).unwrap();
+                    }
+                    // "abodeCLI" => {
+                    //     match Server::get_file("~/abode/target/release/abode.zip") {
+                    //         Ok(file) => {
+                    //             let mut blob = [0; 256];
+                    //             file.read(&mut blob);
+                    //             response = format!(
+                    //                 "HTTP/1.1 200 OK\r\n
+                    //                 Content-Disposition: attachment; filename=\"abode.zip\"\r\n
+                    //                 Content-Length: {}\r\n\r\n{}",
+                    //                 blob.len(),
+                    //                 blob
+                    //             );
+                    //         }
+                    //         Err(e) => println!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                    //     }
+                    // }
+                    _ => {
+                        // ApiString struct
+                        let api_str = Server::is_valid_api(&str_req.1);
+                        match api_str {
+                            Some(api_call) => {
+                                match api_call.version.as_str() {
+                                    "v1" => {
+                                        // get user by ID [/user/[uuid]/]
+                                        match api_call.value[0].as_str() {
+                                            "user" => {
+                                                match str_req.0.as_str() {
+                                                    "GET" => {
+                                                        //TODO: Unsafe unwrap, might not be a
+                                                        //UUID!!
+                                                        let mut status_code = String::new();
+                                                        let content = match Server::get_user(
+                                                            &mut client,
+                                                            Uuid::parse_str(&api_call.value[1])
+                                                                .unwrap(),
+                                                        ) {
+                                                            Ok(user) => {
+                                                                status_code = "200 OK".to_string();
+                                                                user
+                                                            }
+                                                            Err(e) => {
+                                                                status_code =
+                                                                    "404 Not Found".to_string();
+                                                                e
+                                                            }
+                                                        };
+
+                                                        response = format!(
+                                                            "HTTP/1.1 {}\r\n\
+                                                                Content-Type: text/html\r\n\
+                                                                Content-Length: {}\r\n\r\n{}",
+                                                            status_code,
+                                                            content.len(),
+                                                            content
+                                                        );
+
+                                                        stream
+                                                            .write_all(response.as_bytes())
+                                                            .unwrap();
+                                                    }
+                                                    "POST" => match Server::extract_body(&req) {
+                                                        Ok(body) => {
+                                                            let mut content =
+                                                                match Server::insert_user(
+                                                                    &mut client,
+                                                                    &body,
+                                                                ) {
+                                                                    Ok(user) => user,
+                                                                    Err(msg) => msg,
+                                                                };
+
+                                                            response = format!(
+                                                                        "HTTP/1.1 201 Created\r\n\
+                                                                        Content-Type: text/html\r\n\
+                                                                        Content-Length: {}\r\n\r\n{}",
+                                                                        content.len(),
+                                                                        content
+                                                                    );
+
+                                                            stream
+                                                                .write_all(response.as_bytes())
+                                                                .unwrap();
+                                                        }
+                                                        Err(e) => {}
+                                                    },
+                                                    //UPDATE
+                                                    "PUT" => match Server::extract_body(&req) {
+                                                        Ok(body) => {
+                                                            let mut status_code = String::new();
+                                                            let mut content =
+                                                                match Server::update_user(
+                                                                    &mut client,
+                                                                    &body,
+                                                                    Uuid::parse_str(
+                                                                        &api_call.value[1],
+                                                                    )
+                                                                    .unwrap(),
+                                                                ) {
+                                                                    Ok(user) => {
+                                                                        status_code =
+                                                                            "200 OK".to_string();
+                                                                        user
+                                                                    }
+                                                                    Err(e) => {
+                                                                        status_code =
+                                                                            "404 Not Found"
+                                                                                .to_string();
+                                                                        e
+                                                                    }
+                                                                };
+
+                                                            response = format!(
+                                                                        "HTTP/1.1 {}\r\n\
+                                                                        Content-Type: text/html\r\n\
+                                                                        Content-Length: {}\r\n\r\n{}",
+                                                                        status_code,
+                                                                        content.len(),
+                                                                        content
+                                                                    );
+
+                                                            stream
+                                                                .write_all(response.as_bytes())
+                                                                .unwrap();
+                                                        }
+                                                        Err(msg) => {}
+                                                    },
+                                                    _ => {}
+                                                }
+                                            }
+                                            "token" => {
+                                                match str_req.0.as_str() {
+                                                    "POST" => {
+                                                        match Server::extract_body(&req) {
+                                                            Ok(body) => {
+                                                                let mut token = String::new();
+                                                                let mut content =
+                                                                    match Server::authenticate_user(
+                                                                        &mut client,
+                                                                        &body,
+                                                                    ) {
+                                                                        Ok(user) => {
+                                                                            token = user.1;
+                                                                            user.0
+                                                                        }
+                                                                        Err(msg) => msg,
+                                                                    };
+
+                                                                //TODO: what if user has cookies off?
+                                                                response = format!(
+                                                                        "HTTP/1.1 201 Created\r\n\
+                                                                        Set-Cookie: token={}; Expires=Tue, 19 Jan 2038;  Secure; HttpOnly\r\n
+                                                                        Content-Type: text/html\r\n\
+                                                                        Content-Length: {}\r\n\r\n{}",
+                                                                        token,
+                                                                        content.len(),
+                                                                        content
+                                                                    );
+
+                                                                stream
+                                                                    .write_all(response.as_bytes())
+                                                                    .unwrap();
+                                                            }
+                                                            Err(e) => {}
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            _ => {
+                                                let content = format!(
+                                                    "{{\n\"error\": \"Entity Not Found\"\n}}"
+                                                );
+                                                response = format!(
+                                                    "HTTP/1.1 404 Not Found\r\n\
+                                                        Content-Type: text/html\r\n\
+                                                        Content-Length: {}\r\n\r\n{}",
+                                                    content.len(),
+                                                    content
+                                                );
+
+                                                stream.write_all(response.as_bytes()).unwrap();
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            None => {
+                                match Server::get_extension(&str_req.1) {
+                                    Ok(ext) => {
+                                        let mut content = Vec::new();
+                                        match ext {
+                                            //TODO: Consider stripping evil things like '../..' from
+                                            // the requested resource.
+                                            "svg" => {
+                                                match Server::get_file(
+                                                    format!("/rsrcs/{}", str_req.1).as_str(),
+                                                ) {
+                                                    Ok(mut svg) => {
+                                                        svg.read_to_end(&mut content);
+                                                    }
+                                                    Err(e) => {
+                                                        format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                                                    }
+                                                };
+                                                println!("SVG bytes read: {}", content.len());
+                                                response = format!(
+                                                    "HTTP/1.1 200 OK\r\n\
+                                                    Content-Type: image/svg+xml\r\n\
+                                                    Content-Length: {}\r\n\r\n",
+                                                    content.len(),
+                                                );
+                                                let mut byte_res: Vec<u8> = Vec::new();
+                                                for byte in response.as_bytes() {
+                                                    byte_res.push(*byte);
+                                                }
+
+                                                for byte in content {
+                                                    byte_res.push(byte);
+                                                }
+
+                                                stream.write_all(&byte_res).unwrap();
+                                            }
+                                            _ => (),
+                                        }
+                                    }
+                                    _ => {
+                                        let content = match Server::get_page("/views/whats-that.html") {
+                                        Ok(html) => html,
+                                        Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                                    };
+
+                                        response = format!(
+                                            "HTTP/1.1 404 Not Found\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                                            content.len(),
+                                            content
+                                        );
+                                        stream.write(response.as_bytes()).unwrap();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stream.flush().unwrap();
+    }
+
+    pub fn run(port: u64, port_http: u64) {
+        let mut address = String::from("0.0.0.0:");
+        address += &port.to_string();
+        let listener = TcpListener::bind(&address).unwrap();
+
+        let mut address_http = String::from("0.0.0.0:");
+        address_http += &port_http.to_string();
+        let listener_http = TcpListener::bind(&address_http).unwrap();
+
         // Start postgres client
-        let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+        let mut db_client = Arc::new(Mutex::new(
+            Client::connect("host=localhost user=postgres", NoTls).unwrap(),
+        ));
 
         // open Log file
-        let mut log_file = Server::tail_file().unwrap();
+        let mut log_file = Arc::new(Server::tail_file().unwrap());
 
-        // TODO: Move to an unshared config file
         let mut ssl_key = format!("{}", env!("CARGO_MANIFEST_DIR"));
         ssl_key += "/keys/privkey.pem";
 
@@ -64,531 +585,65 @@ impl Server {
         acceptor.check_private_key().unwrap();
         let acceptor = Arc::new(acceptor.build());
 
-        for stream in listener.incoming() {
-            println!("Got one!");
+        let acceptor = acceptor.clone();
+        let mut th_db_client = db_client.clone();
+        let th_log_file = log_file.clone();
 
-            let acceptor = acceptor.clone();
-            thread::spawn(move || {
-                let stream = acceptor.accept(stream.unwrap()).unwrap();
-                handle_request(stream);
-            }
-            let mut stream = stream.unwrap();
-
-            //TODO: If HTTPS feature enabled.
-
-            //Browser extensions CRAM a lot of extra data into the cookie header.
-            //It is not an Error for this buffer to be too small, so we won't catch it
-            let mut req = [0; 2048];
-
-            // Split to different actions
-            let mut response = String::new();
-            match stream.read(&mut req) {
-                Err(msg) => println!("{}", msg),
-                Ok(bytes_read) => {
-                    // If the requests contain a lot of data, we will log it, because we are curious how
-                    // people are requesting, and then skip it.
-                    if bytes_read > 1024 {
-                        Server::add_to_file(&log_file, &req);
-                        continue;
-                    }
-
-                    println!("Byte of reqs: {}", bytes_read);
-                    println!("{:?}", req);
-
-                    // 404 users if they send any non-utf8 data in request
-                    let mut check_req = String::new();
-                    match std::str::from_utf8(&req) {
-                        Ok(checked_req) => check_req = checked_req.to_string(),
-                        Err(e) => {
-                            let content = match Server::get_page("/views/whats-that.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-
-                            response = format!(
-                                "HTTP/1.1 404 Not Found\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            stream.write(response.as_bytes()).unwrap();
-                            continue;
-                        }
-                    }
-                    let str_req = Server::whats_reqd(check_req);
-                    println!("Path: {}", str_req.1);
-                    match str_req.1.as_str() {
-                        "/" | "/wuh???" => {
-                            let content = match Server::get_page("/views/landing.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write_all(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                Ok(num) => (),
+        let mut th_db_client_http = db_client.clone();
+        let th_log_file_http = log_file.clone();
+        //TODO: If HTTPS feature enabled.
+        let https_join_handle = thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut th_db_client = th_db_client.clone();
+                let th_log_file = th_log_file.clone();
+                match stream {
+                    Ok(mut stream) => {
+                        println!("Https Peer at {:?}", stream.peer_addr());
+                        let stream_c = stream.try_clone().unwrap();
+                        match acceptor.accept(stream_c) {
+                            Ok(stream_a) => {
+                                thread::spawn(move || {
+                                    Server::handle_https(stream_a, th_log_file, th_db_client);
+                                });
                             }
-                        }
-                        "/favicon.ico" => {
-                            let mut content = Vec::new();
-                            match Server::get_file("/rsrcs/favicon.png") {
-                                Ok(mut icon) => {
-                                    icon.read_to_end(&mut content);
-                                }
-                                Err(e) => {
-                                    format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
-                                }
-                            };
-                            println!("Icon bytes read: {}", content.len());
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: image/png\r\n\
-                                Content-Length: {}\r\n\r\n",
-                                content.len(),
-                            );
-                            let mut byte_res: Vec<u8> = Vec::new();
-                            for byte in response.as_bytes() {
-                                byte_res.push(*byte);
-                            }
-
-                            for byte in content {
-                                byte_res.push(byte);
-                            }
-
-                            stream.write(&byte_res).unwrap();
-                        }
-                        "/global.css" => {
-                            let content = match Server::get_page("/rsrcs/global.css") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/css\r\n\
+                            Err(e) => {
+                                println!("{:?}", e);
+                                let content =
+                                    String::from("This port can only be used for HTTPS (not HTTP)");
+                                let response = format!(
+                                    "HTTP/1.1 418 I'm a teapot\r\n\
                                 Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                _ => (),
-                            }
-                        }
-                        "/login-page" => {
-                            let content = match Server::get_page("/views/login.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                _ => (),
-                            }
-                        }
-                        "/subscribe" => {
-                            let content = match Server::get_page("/views/subscribe.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                _ => (),
-                            }
-                        }
-
-                        "/why???" => {
-                            let content = match Server::get_page("/views/why???.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                _ => (),
-                            }
-                        }
-                        "/pre-release" => {
-                            let content = match Server::get_page("/views/pre-release.html") {
-                                Ok(html) => html,
-                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                            };
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            match stream.write(response.as_bytes()) {
-                                Err(msg) => {
-                                    println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
-                                }
-                                _ => (),
-                            }
-                        }
-                        "/installs" => {
-                            let mut content = String::new();
-                            match Server::get_installs(&mut client) {
-                                Ok(num) => content = num.to_string(),
-                                Err(e) => content = "0".to_string(),
-                            };
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-                            stream.write(response.as_bytes()).unwrap();
-                        }
-                        "/subscriber" => {
-                            let mut content = (String::new(), String::new());
-                            match Server::extract_body(&req) {
-                                Ok(body) => match Server::validate_email(&body) {
-                                    Ok(email) => {
-                                        match Server::add_subscriber(&mut client, email) {
-                                            Ok(res) => {
-                                                content.0 = String::from("Success");
-                                                content.1 = res;
-
-                                                #[cfg(feature = "email")]
-                                                emailer.send_to(email);
-                                            }
-                                            Err(e) => match e.as_str() {
-                                                "23505" => {
-                                                    content.0 = String::from("Dupe");
-                                                    content.1 = String::from(
-                                                        "Email is already present! Thank you!",
-                                                    );
-                                                }
-                                                _ => {
-                                                    content.0 = String::from("Other");
-                                                    content.1 = e;
-                                                }
-                                            },
-                                        };
-                                    }
-                                    Err(msg) => {
-                                        content = msg;
-                                    }
-                                },
-                                Err(msg) => {
-                                    println!("{}", msg);
-                                    continue;
-                                }
-                            }
-
-                            let content = format!(
-                                "{{\n\"code\": \"{}\",\n\"msg\": \"{}\"\n}}",
-                                content.0, content.1
-                            );
-                            response = format!(
-                                "HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/html\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                content.len(),
-                                content
-                            );
-
-                            stream.write(response.as_bytes()).unwrap();
-                        }
-                        // "abodeCLI" => {
-                        //     match Server::get_file("~/abode/target/release/abode.zip") {
-                        //         Ok(file) => {
-                        //             let mut blob = [0; 256];
-                        //             file.read(&mut blob);
-                        //             response = format!(
-                        //                 "HTTP/1.1 200 OK\r\n
-                        //                 Content-Disposition: attachment; filename=\"abode.zip\"\r\n
-                        //                 Content-Length: {}\r\n\r\n{}",
-                        //                 blob.len(),
-                        //                 blob
-                        //             );
-                        //         }
-                        //         Err(e) => println!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                        //     }
-                        // }
-                        _ => {
-                            // ApiString struct
-                            let api_str = Server::is_valid_api(&str_req.1);
-                            match api_str {
-                                Some(api_call) => {
-                                    match api_call.version.as_str() {
-                                        "v1" => {
-                                            // get user by ID [/user/[uuid]/]
-                                            match api_call.value[0].as_str() {
-                                                "user" => {
-                                                    match str_req.0.as_str() {
-                                                        "GET" => {
-                                                            //TODO: Unsafe unwrap, might not be a
-                                                            //UUID!!
-                                                            let mut status_code = String::new();
-                                                            let content = match Server::get_user(
-                                                                &mut client,
-                                                                Uuid::parse_str(&api_call.value[1])
-                                                                    .unwrap(),
-                                                            ) {
-                                                                Ok(user) => {
-                                                                    status_code =
-                                                                        "200 OK".to_string();
-                                                                    user
-                                                                }
-                                                                Err(e) => {
-                                                                    status_code =
-                                                                        "404 Not Found".to_string();
-                                                                    e
-                                                                }
-                                                            };
-
-                                                            response = format!(
-                                                                "HTTP/1.1 {}\r\n\
-                                                                Content-Type: text/html\r\n\
-                                                                Content-Length: {}\r\n\r\n{}",
-                                                                status_code,
-                                                                content.len(),
-                                                                content
-                                                            );
-
-                                                            stream
-                                                                .write(response.as_bytes())
-                                                                .unwrap();
-                                                        }
-                                                        "POST" => {
-                                                            match Server::extract_body(&req) {
-                                                                Ok(body) => {
-                                                                    let mut content =
-                                                                        match Server::insert_user(
-                                                                            &mut client,
-                                                                            &body,
-                                                                        ) {
-                                                                            Ok(user) => user,
-                                                                            Err(msg) => msg,
-                                                                        };
-
-                                                                    response = format!(
-                                                                        "HTTP/1.1 201 Created\r\n\
-                                                                        Content-Type: text/html\r\n\
-                                                                        Content-Length: {}\r\n\r\n{}",
-                                                                        content.len(),
-                                                                        content
-                                                                    );
-
-                                                                    stream
-                                                                        .write(response.as_bytes())
-                                                                        .unwrap();
-                                                                }
-                                                                Err(e) => {}
-                                                            }
-                                                        }
-                                                        //UPDATE
-                                                        "PUT" => match Server::extract_body(&req) {
-                                                            Ok(body) => {
-                                                                let mut status_code = String::new();
-                                                                let mut content =
-                                                                    match Server::update_user(
-                                                                        &mut client,
-                                                                        &body,
-                                                                        Uuid::parse_str(
-                                                                            &api_call.value[1],
-                                                                        )
-                                                                        .unwrap(),
-                                                                    ) {
-                                                                        Ok(user) => {
-                                                                            status_code = "200 OK"
-                                                                                .to_string();
-                                                                            user
-                                                                        }
-                                                                        Err(e) => {
-                                                                            status_code =
-                                                                                "404 Not Found"
-                                                                                    .to_string();
-                                                                            e
-                                                                        }
-                                                                    };
-
-                                                                response = format!(
-                                                                        "HTTP/1.1 {}\r\n\
-                                                                        Content-Type: text/html\r\n\
-                                                                        Content-Length: {}\r\n\r\n{}",
-                                                                        status_code,
-                                                                        content.len(),
-                                                                        content
-                                                                    );
-
-                                                                stream
-                                                                    .write(response.as_bytes())
-                                                                    .unwrap();
-                                                            }
-                                                            Err(msg) => {}
-                                                        },
-                                                        _ => {}
-                                                    }
-                                                }
-                                                "token" => {
-                                                    match str_req.0.as_str() {
-                                                        "POST" => {
-                                                            match Server::extract_body(&req) {
-                                                                Ok(body) => {
-                                                                    let mut token = String::new();
-                                                                    let mut content =
-                                                                        match Server::authenticate_user(
-                                                                            &mut client,
-                                                                            &body,
-                                                                        ) {
-                                                                            Ok(user) => {
-                                                                                token = user.1;
-                                                                                user.0
-                                                                            }
-                                                                            Err(msg) => msg,
-                                                                        };
-
-                                                                    //TODO: what if user has cookies off?
-                                                                    response = format!(
-                                                                        "HTTP/1.1 201 Created\r\n\
-                                                                        Set-Cookie: token={}; Expires=Tue, 19 Jan 2038;  Secure; HttpOnly\r\n
-                                                                        Content-Type: text/html\r\n\
-                                                                        Content-Length: {}\r\n\r\n{}",
-                                                                        token,
-                                                                        content.len(),
-                                                                        content
-                                                                    );
-
-                                                                    stream
-                                                                        .write(response.as_bytes())
-                                                                        .unwrap();
-                                                                }
-                                                                Err(e) => {}
-                                                            }
-                                                        }
-                                                        _ => {}
-                                                    }
-                                                }
-                                                _ => {
-                                                    let content = format!(
-                                                        "{{\n\"error\": \"Entity Not Found\"\n}}"
-                                                    );
-                                                    response = format!(
-                                                        "HTTP/1.1 404 Not Found\r\n\
-                                                        Content-Type: text/html\r\n\
-                                                        Content-Length: {}\r\n\r\n{}",
-                                                        content.len(),
-                                                        content
-                                                    );
-
-                                                    stream.write(response.as_bytes()).unwrap();
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                None => {
-                                    match Server::get_extension(&str_req.1) {
-                                        Ok(ext) => {
-                                            let mut content = Vec::new();
-                                            match ext {
-                                                //TODO: Consider stripping evil things like '../..' from
-                                                // the requested resource.
-                                                "svg" => {
-                                                    match Server::get_file(
-                                                        format!("/rsrcs/{}", str_req.1).as_str(),
-                                                    ) {
-                                                        Ok(mut svg) => {
-                                                            svg.read_to_end(&mut content);
-                                                        }
-                                                        Err(e) => {
-                                                            format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
-                                                        }
-                                                    };
-                                                    println!("SVG bytes read: {}", content.len());
-                                                    response = format!(
-                                                        "HTTP/1.1 200 OK\r\n\
-                                                Content-Type: image/svg+xml\r\n\
-                                                Content-Length: {}\r\n\r\n",
-                                                        content.len(),
-                                                    );
-                                                    let mut byte_res: Vec<u8> = Vec::new();
-                                                    for byte in response.as_bytes() {
-                                                        byte_res.push(*byte);
-                                                    }
-
-                                                    for byte in content {
-                                                        byte_res.push(byte);
-                                                    }
-
-                                                    stream.write(&byte_res).unwrap();
-                                                }
-                                                _ => (),
-                                            }
-                                        }
-                                        _ => {
-                                            let content = match Server::get_page("/views/whats-that.html") {
-                                        Ok(html) => html,
-                                        Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
-                                    };
-
-                                            response = format!(
-                                                "HTTP/1.1 404 Not Found\r\n\
-                                Content-Length: {}\r\n\r\n{}",
-                                                content.len(),
-                                                content
-                                            );
-                                            stream.write(response.as_bytes()).unwrap();
-                                        }
-                                    }
-                                }
+                                    content.len(),
+                                    content
+                                );
+                                stream.write(response.as_bytes()).unwrap();
+                                stream.flush().unwrap();
                             }
                         }
                     }
+                    Err(e) => println!("TcpStream error: {}", e),
                 }
             }
+        });
 
-            stream.flush().unwrap();
-        }
+        let http_join_handle = thread::spawn(move || {
+            for stream in listener_http.incoming() {
+                let th_log_file_http = th_log_file_http.clone();
+                let mut th_db_client_http = th_db_client_http.clone();
+                match stream {
+                    Ok(stream) => {
+                        println!("Http Peer from {:?}", stream.peer_addr());
+                        thread::spawn(move || {
+                            Server::handle_https(stream, th_log_file_http, th_db_client_http);
+                        });
+                    }
+                    Err(e) => println!("TcpStream error: {}", e),
+                }
+            }
+        });
+
+        println!("{:?}", https_join_handle.join());
+        println!("{:?}", http_join_handle.join());
     }
 
     pub fn get_page(page: &str) -> io::Result<String> {
@@ -615,6 +670,7 @@ impl Server {
     pub fn whats_reqd(req: String) -> (String, String) {
         let mut lines: Vec<&str> = req.lines().collect();
         let first_line: Vec<&str> = lines[0].split(" ").collect();
+        println!("What is this: {}", first_line[0]);
         match first_line[0] {
             "GET" => (String::from("GET"), String::from(first_line[1])),
             "POST" => (String::from("POST"), String::from(first_line[1])),
@@ -629,7 +685,8 @@ impl Server {
         }
     }
 
-    pub fn get_installs(client: &mut postgres::Client) -> Result<i64, String> {
+    pub fn get_installs(client: &mut Arc<Mutex<postgres::Client>>) -> Result<i64, String> {
+        let mut client = client.lock().unwrap();
         let res = client.query("SELECT value FROM installs", &[]);
         match res {
             Ok(rows) => {
@@ -656,7 +713,7 @@ impl Server {
         if left == 0 {
             Err("".to_string())
         } else {
-            println!("{}", &path[left..right]);
+            // println!("{}", &path[left..right]);
             Ok(&path[left..right])
         }
     }
@@ -682,12 +739,13 @@ impl Server {
     }
 
     pub fn add_subscriber<'a>(
-        client: &mut postgres::Client,
+        client: &mut Arc<Mutex<postgres::Client>>,
         email: &str,
     ) -> Result<String, String> {
         //generate unique ID
         let uuid = &Uuid::new_v4();
 
+        let mut client = client.lock().unwrap();
         let res = client.query("INSERT INTO subscriber VALUES($1, $2)", &[&uuid, &email]);
         match res {
             Ok(rows) => Ok(String::from("Success")),
@@ -771,9 +829,10 @@ impl Server {
     }
 
     pub fn get_user(
-        client: &mut postgres::Client,
+        client: &mut Arc<Mutex<postgres::Client>>,
         uid: uuid::Uuid,
     ) -> Result<json::JsonValue, json::JsonValue> {
+        let mut client = client.lock().unwrap();
         let res = client.query("SELECT * FROM users WHERE id = $1", &[&uid]);
         match res {
             Ok(rows) => {
@@ -795,7 +854,7 @@ impl Server {
     }
 
     pub fn update_user(
-        client: &mut postgres::Client,
+        client: &mut Arc<Mutex<postgres::Client>>,
         json_user: &str,
         uid: uuid::Uuid,
     ) -> Result<json::JsonValue, json::JsonValue> {
@@ -805,6 +864,7 @@ impl Server {
             return Err(object! {error: String::from("'Name' field must be a string")});
         }
 
+        let mut client = client.lock().unwrap();
         if user_obj["user"]["name"].is_string() {
             let res = client.query(
                 "UPDATE users SET name = $1 WHERE id = $2 RETURNING *",
@@ -834,10 +894,11 @@ impl Server {
     }
 
     pub fn insert_user(
-        client: &mut postgres::Client,
+        client: &mut Arc<Mutex<postgres::Client>>,
         json_user: &str,
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut uid = Uuid::new_v4();
+        let mut client = client.lock().unwrap();
         loop {
             if client
                 .query("SELECT * FROM users WHERE id = $1", &[&uid])
@@ -938,7 +999,7 @@ impl Server {
 
     //TODO: Multi-device login
     pub fn authenticate_user(
-        client: &mut postgres::Client,
+        client: &mut Arc<Mutex<postgres::Client>>,
         body: &str,
     ) -> Result<(json::JsonValue, String), json::JsonValue> {
         //      Extract pass, hash it
@@ -954,6 +1015,7 @@ impl Server {
         }
 
         let hashed_pass = Server::hash(pass_plain.unwrap());
+        let mut client = client.lock().unwrap();
 
         if user_obj["user"]["name"].is_string() && user_obj["user"]["pass"].is_string() {
             //      Select user if they match
@@ -1007,6 +1069,7 @@ impl Server {
         }
     }
 
+    //TODO: Finish hash.
     pub fn hash(browns: &str) -> String {
         let result = String::new();
 
