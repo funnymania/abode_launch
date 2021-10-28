@@ -329,22 +329,33 @@ impl Server {
                                             "user" => {
                                                 match str_req.0.as_str() {
                                                     "GET" => {
-                                                        //TODO: Unsafe unwrap, might not be a
-                                                        //UUID!!
                                                         let mut status_code = String::new();
-                                                        let content = match Server::get_user(
-                                                            &mut client,
-                                                            Uuid::parse_str(&api_call.value[1])
-                                                                .unwrap(),
+
+                                                        let content = match Uuid::parse_str(
+                                                            &api_call.value[1],
                                                         ) {
-                                                            Ok(user) => {
-                                                                status_code = "200 OK".to_string();
-                                                                user
+                                                            Ok(user_uuid) => {
+                                                                match Server::get_user(
+                                                                    &mut client,
+                                                                    user_uuid,
+                                                                ) {
+                                                                    Ok(user) => {
+                                                                        status_code =
+                                                                            "200 OK".to_string();
+                                                                        user
+                                                                    }
+                                                                    Err(e) => {
+                                                                        status_code =
+                                                                            "404 Not Found"
+                                                                                .to_string();
+                                                                        e
+                                                                    }
+                                                                }
                                                             }
                                                             Err(e) => {
                                                                 status_code =
                                                                     "404 Not Found".to_string();
-                                                                e
+                                                                object! {error: e.to_string()}
                                                             }
                                                         };
 
@@ -1089,15 +1100,20 @@ mod test {
 
     //TODO: Get table structure (column names, qualities) from test_users before dropping it.
     //TODO: Establish how to add columns to users in general.
-    fn setup() -> postgres::Client {
+    fn setup() -> Arc<Mutex<postgres::Client>> {
         // Start postgres client
-        let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+        let mut client = Arc::new(Mutex::new(
+            Client::connect("host=localhost user=postgres", NoTls).unwrap(),
+        ));
+
+        let mut client_clone = client.clone();
+        let mut client_clone = client_clone.lock().unwrap();
 
         // Remove test_tables
-        client.execute("DROP TABLE users", &[]);
+        client_clone.execute("DROP TABLE users", &[]);
 
         // Create create test_tables
-        client.execute(
+        client_clone.execute(
             "CREATE TABLE users (id uuid PRIMARY KEY, name varchar(255))",
             &[],
         );
