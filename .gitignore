@@ -1,5 +1,6 @@
 /target
 /notes
 /src/personal_info.rs
-/logs/*
+/logs/*.txt
 *.swp
+/keys

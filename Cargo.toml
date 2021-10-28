@@ -11,3 +11,10 @@ postgres = { version = "0.19.1", features = ["with-uuid-0_8"] }
 rand = "0.8.3"
 uuid = { version = "0.8", features = ["v4"] }
 lettre = "0.10.0-rc.3"
+json = "0.12.4"
+openssl = "0.10.36"
+
+[features]
+default = ["https"]
+email = []
+https = []
