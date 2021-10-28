@@ -14,4 +14,4 @@ Take note that AWS will not actually support the email function on their EC2 int
 
 ## Environment
 
-For emailing and https: You need Openssl installed. Please refer (here)[https://docs.rs/openssl/0.10.37/openssl/#automatic] for directions on how openssl-rust searches for Openssl's libs and headers.
+For emailing and https: You need Openssl installed. Please refer [here](https://docs.rs/openssl/0.10.37/openssl/#automatic) for directions on how openssl-rust searches for Openssl's libs and headers.
