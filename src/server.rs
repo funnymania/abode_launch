@@ -4,6 +4,7 @@ use crate::email::Email;
 use postgres::{Client, NoTls};
 
 use json::object;
+#[cfg(feature = "https")]
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use uuid::Uuid;
 
@@ -568,63 +569,69 @@ impl Server {
         // open Log file
         let mut log_file = Arc::new(Server::tail_file().unwrap());
 
-        let mut ssl_key = format!("{}", env!("CARGO_MANIFEST_DIR"));
-        ssl_key += "/keys/privkey.pem";
-
-        let mut ssl_chain = format!("{}", env!("CARGO_MANIFEST_DIR"));
-        ssl_chain += "/keys/fullchain.pem";
-
-        // Prep SSL Stream
-        let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-        acceptor
-            .set_private_key_file(ssl_key.as_str(), SslFiletype::PEM)
-            .unwrap();
-        acceptor
-            .set_certificate_chain_file(ssl_chain.as_str())
-            .unwrap();
-        acceptor.check_private_key().unwrap();
-        let acceptor = Arc::new(acceptor.build());
-
-        let acceptor = acceptor.clone();
-        let mut th_db_client = db_client.clone();
-        let th_log_file = log_file.clone();
-
         let mut th_db_client_http = db_client.clone();
         let th_log_file_http = log_file.clone();
-        //TODO: If HTTPS feature enabled.
-        let https_join_handle = thread::spawn(move || {
-            for stream in listener.incoming() {
-                let mut th_db_client = th_db_client.clone();
-                let th_log_file = th_log_file.clone();
-                match stream {
-                    Ok(mut stream) => {
-                        println!("Https Peer at {:?}", stream.peer_addr());
-                        let stream_c = stream.try_clone().unwrap();
-                        match acceptor.accept(stream_c) {
-                            Ok(stream_a) => {
-                                thread::spawn(move || {
-                                    Server::handle_https(stream_a, th_log_file, th_db_client);
-                                });
-                            }
-                            Err(e) => {
-                                println!("{:?}", e);
-                                let content =
-                                    String::from("This port can only be used for HTTPS (not HTTP)");
-                                let response = format!(
-                                    "HTTP/1.1 418 I'm a teapot\r\n\
+
+        // Prep SSL Stream
+        #[cfg(feature = "https")]
+        {
+            let mut ssl_key = format!("{}", env!("CARGO_MANIFEST_DIR"));
+            ssl_key += "/keys/privkey.pem";
+
+            let mut ssl_chain = format!("{}", env!("CARGO_MANIFEST_DIR"));
+            ssl_chain += "/keys/fullchain.pem";
+
+            let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+            acceptor
+                .set_private_key_file(ssl_key.as_str(), SslFiletype::PEM)
+                .unwrap();
+            acceptor
+                .set_certificate_chain_file(ssl_chain.as_str())
+                .unwrap();
+            acceptor.check_private_key().unwrap();
+            let acceptor = Arc::new(acceptor.build());
+
+            let acceptor = acceptor.clone();
+            let mut th_db_client = db_client.clone();
+            let th_log_file = log_file.clone();
+
+            let https_join_handle = thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let mut th_db_client = th_db_client.clone();
+                    let th_log_file = th_log_file.clone();
+                    match stream {
+                        Ok(mut stream) => {
+                            println!("Https Peer at {:?}", stream.peer_addr());
+                            let stream_c = stream.try_clone().unwrap();
+                            match acceptor.accept(stream_c) {
+                                Ok(stream_a) => {
+                                    thread::spawn(move || {
+                                        Server::handle_https(stream_a, th_log_file, th_db_client);
+                                    });
+                                }
+                                Err(e) => {
+                                    println!("{:?}", e);
+                                    let content = String::from(
+                                        "This port can only be used for HTTPS (not HTTP)",
+                                    );
+                                    let response = format!(
+                                        "HTTP/1.1 418 I'm a teapot\r\n\
                                 Content-Length: {}\r\n\r\n{}",
-                                    content.len(),
-                                    content
-                                );
-                                stream.write(response.as_bytes()).unwrap();
-                                stream.flush().unwrap();
+                                        content.len(),
+                                        content
+                                    );
+                                    stream.write(response.as_bytes()).unwrap();
+                                    stream.flush().unwrap();
+                                }
                             }
                         }
+                        Err(e) => println!("TcpStream error: {}", e),
                     }
-                    Err(e) => println!("TcpStream error: {}", e),
                 }
-            }
-        });
+            });
+
+            // println!("{:?}", https_join_handle.join());
+        }
 
         let http_join_handle = thread::spawn(move || {
             for stream in listener_http.incoming() {
@@ -642,7 +649,6 @@ impl Server {
             }
         });
 
-        println!("{:?}", https_join_handle.join());
         println!("{:?}", http_join_handle.join());
     }
 

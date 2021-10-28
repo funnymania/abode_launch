@@ -15,5 +15,6 @@ json = "0.12.4"
 openssl = "0.10.36"
 
 [features]
-default = []
+default = ["https"]
 email = []
+https = []
