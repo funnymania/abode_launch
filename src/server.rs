@@ -403,6 +403,7 @@ impl Server {
                                                     "PUT" => match Server::extract_body(&req) {
                                                         Ok(body) => {
                                                             let mut status_code = String::new();
+                                                            let token = "test";
                                                             let mut content =
                                                                 match Server::update_user(
                                                                     &mut client,
@@ -411,6 +412,7 @@ impl Server {
                                                                         &api_call.value[1],
                                                                     )
                                                                     .unwrap(),
+                                                                    token,
                                                                 ) {
                                                                     Ok(user) => {
                                                                         status_code =
@@ -893,18 +895,51 @@ impl Server {
         }
     }
 
+    //TODO: A user should be just a UUID (as an index), a passphrase, and at least a second passphrase (aka
+    //username). Identity_Servicers (aka our customers) have a table for their users which are
+    //actually identities. (id_id, app_id, app_configs, app_attributes)
+    //TODO: user_identity table (id_id, user_id, name, configs, attributes) is the table. get_user
+    //would mostly only be used for our own information. However there is another table,
+    //user_general (this contains information that all identities might use, such as mailing
+    //address, birth name, etc) and another table user_private (information that you do not want
+    //any other person to have access to) both of which have a foreign key to a user.
+    //When a company is pulling in a user object, we are on backend pulling from
+    //app_identities(app_id, id_id, app_configs) and also user_general() to create a JSON glob
+    //like: "user": { "shared": {}, "app": {} }
+    //this may also be enhanced by device related data, but that is too advanced.
     pub fn update_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         json_user: &str,
         uid: uuid::Uuid,
+        token: &str,
     ) -> Result<json::JsonValue, json::JsonValue> {
+        let mut client = client.lock().unwrap();
+        let uuid_res = Uuid::parse_str(token);
+        let mut uuid_token = Uuid::new_v4();
+        match uuid_res {
+            Ok(token) => uuid_token = token,
+            Err(e) => return Err(object! {error: String::from("Token is not valid")}),
+        }
+
+        //Validate that this is the right customer's user (session token)
+        match client.query(
+            "SELECT * FROM user_device WHERE sess_token = $1 AND uid = $2",
+            &[&uuid_token, &uid],
+        ) {
+            Ok(rows) => {
+                if rows.len() == 0 {
+                    return Err(object! {error: String::from("User must log-in again.")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
+        }
+
         let user_obj = json::parse(json_user).unwrap();
         let name_plain = user_obj["user"]["name"].as_str();
         if name_plain == None {
             return Err(object! {error: String::from("'Name' field must be a string")});
         }
 
-        let mut client = client.lock().unwrap();
         if user_obj["user"]["name"].is_string() {
             let res = client.query(
                 "UPDATE users SET name = $1 WHERE id = $2 RETURNING *",
@@ -1045,6 +1080,7 @@ impl Server {
     }
 
     //TODO: Multi-device login
+    //TODO: Create an identity table (id_id, user_id, id_name, OTHER STUFF)
     pub fn authenticate_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         body: &str,
@@ -1223,12 +1259,13 @@ mod test {
 
         let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
 
-        match Server::update_user(&mut client, json_user, uid) {
+        let token = Uuid::new_v4().to_simple().to_string();
+        match Server::update_user(&mut client, json_user, uid, token.as_str()) {
             Err(result) => {
                 assert_eq!(
                     result,
                     object! {
-                        error: "UserId not found".to_string()
+                        error: "User must log-in again.".to_string()
                     }
                 );
             }
@@ -1297,14 +1334,17 @@ mod test {
         match Server::insert_user(&mut client, json_user) {
             Ok(result) => {
                 let uid = Uuid::parse_str(result["user"]["id"].as_str().unwrap()).unwrap();
-                let changed_user = "{ \"user\": { \"name\": \"Cheri\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
-                match Server::update_user(&mut client, json_user, uid) {
-                    Ok(user) => {
-                        assert_eq!(
-                            user["user"]["id"].as_str().unwrap(),
-                            uid.to_simple().to_string()
-                        );
-                        assert_eq!(user["user"]["name"], result["user"]["name"]);
+                //TODO: Users are not defined by their 'name' but by some ID
+                let changed_user = "{ \"user\": { \"name\": \"Cheri\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
+                match Server::authenticate_user(&mut client, changed_user) {
+                    Ok(token) => {
+                        match Server::update_user(&mut client, changed_user, uid, token.1.as_str())
+                        {
+                            Ok(user) => {
+                                assert_eq!(user["user"]["name"], String::from("Cheri"));
+                            }
+                            Err(e) => panic!("{}", e),
+                        }
                     }
                     Err(e) => panic!("{}", e),
                 }
