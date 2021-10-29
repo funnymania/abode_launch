@@ -1025,19 +1025,22 @@ impl Server {
         if name_plain == None {
             return Err(object! {error: String::from("'Name' field must be a string")});
         }
+        let name_plain = name_plain.unwrap();
 
         let pass_plain = user_obj["user"]["pass"].as_str();
         if pass_plain == None {
             return Err(object! {error: String::from("'Password' is in an invalid format")});
         }
+        let pass_plain = pass_plain.unwrap();
 
-        let hashed_pass = Server::hash(pass_plain.unwrap());
+        let hashed_pass = Server::hash(pass_plain);
         let mut client = client.lock().unwrap();
 
+        println!("heh {}", hashed_pass);
         if user_obj["user"]["name"].is_string() && user_obj["user"]["pass"].is_string() {
             //      Select user if they match
             let res = client.query(
-                "SELECT * from user WHERE name = $1 AND pass = $2",
+                "SELECT * from users WHERE name = $1 AND pass = $2",
                 &[&name_plain, &hashed_pass],
             );
 
@@ -1090,7 +1093,7 @@ impl Server {
     pub fn hash(browns: &str) -> String {
         let result = String::new();
 
-        result
+        browns.to_owned()
     }
 }
 
@@ -1114,11 +1117,35 @@ mod test {
 
         // Create create test_tables
         client_clone.execute(
-            "CREATE TABLE users (id uuid PRIMARY KEY, name varchar(255))",
+            "CREATE TABLE users (id uuid PRIMARY KEY, name varchar(255), pass varchar(255))",
             &[],
         );
 
         client
+    }
+
+    #[test]
+    fn authenticate_invalid_creds() {
+        let mut client = setup();
+
+        let body = "{ \"user\": { \"name\": \"Squirck\", \"pass\": \"fentonBalm\" } }";
+
+        // SELECT user.
+        assert_eq!(
+            Server::authenticate_user(&mut client, body),
+            Err(object! {
+                error: "User and pass not found. Try again.".to_string()
+            })
+        );
+    }
+
+    fn authenticate_valid_creds() {
+        let mut client = setup();
+        //TODO: Login with valid creds
+
+        //TODO: Start a session for that user
+
+        //TODO: Return User
     }
 
     #[test]
