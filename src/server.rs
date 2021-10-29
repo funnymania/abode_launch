@@ -856,9 +856,10 @@ impl Server {
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
         let plain_sess_token = Server::decrypt(sess_token);
+        let uuid_token = Uuid::parse_str(plain_sess_token.as_str()).unwrap();
         let res = client.query(
             "SELECT * FROM user_device WHERE sess_token = $1",
-            &[&plain_sess_token],
+            &[&uuid_token],
         );
 
         //Validate that this is the right customer's user (session token)
@@ -957,11 +958,18 @@ impl Server {
         if name_plain == None {
             return Err(object! {error: String::from("'Name' field must be a string")});
         }
+        let name_plain = name_plain.unwrap();
 
-        if user_obj["user"]["name"].is_string() {
+        let pass_plain = user_obj["user"]["pass"].as_str();
+        if pass_plain == None {
+            return Err(object! {error: String::from("'Pass' field must be a string")});
+        }
+        let pass_hashed = Server::hash(pass_plain.unwrap());
+
+        if user_obj["user"]["name"].is_string() && user_obj["user"]["pass"].is_string() {
             let res = client.query(
-                "INSERT INTO users (id, name) VALUES ($1, $2) RETURNING *",
-                &[&uid, &name_plain],
+                "INSERT INTO users (id, name, pass) VALUES ($1, $2, $3) RETURNING *",
+                &[&uid, &name_plain, &pass_hashed],
             );
             match res {
                 Ok(rows) => {
@@ -1058,7 +1066,6 @@ impl Server {
         let hashed_pass = Server::hash(pass_plain);
         let mut client = client.lock().unwrap();
 
-        println!("heh {}", hashed_pass);
         if user_obj["user"]["name"].is_string() && user_obj["user"]["pass"].is_string() {
             //      Select user if they match
             let res = client.query(
@@ -1073,18 +1080,20 @@ impl Server {
                             error: "User and pass not found. Try again.".to_string()
                         })
                     } else {
-                        let uid = rows[0].get::<&str, Uuid>("id").to_simple().to_string();
+                        let uid = rows[0].get::<&str, Uuid>("id");
+
                         let other_logins =
                             client.query("SELECT * FROM user_device WHERE uid = $1", &[&uid]);
                         match other_logins {
                             Ok(token_rows) => {
                                 let new_id = Uuid::new_v4();
-                                //TODO: Default ID (unknown), 1 = iphone, 2 = android, 3 = mac,
+                                //TODO: Default ID 0 = (unknown), 1 = iphone, 2 = android, 3 = mac,
                                 //4 = linux, 5 = windows
+                                let dev_type = "Unknown";
                                 let new_sess_token = Uuid::new_v4();
-                                let insert_res = client.query("INSERT INTO user_device (uid, id, device_type, sess_token, sess_date) VALUES ($1, $2, $3, $4, now) RETURNING *", &[&uid, &new_id, &new_sess_token]);
+                                let insert_res = client.query("INSERT INTO user_device (uid, id, device_type, sess_token, sess_date) VALUES ($1, $2, $3, $4, 'now') RETURNING *", &[&uid, &new_id, &dev_type, &new_sess_token]);
                                 match insert_res {
-                                    Ok(rows) => Ok((
+                                    Ok(_) => Ok((
                                         object! {
                                             user: {
                                                 id: rows[0].get::<&str, Uuid>("id").to_simple().to_string(),
@@ -1094,12 +1103,12 @@ impl Server {
                                         new_sess_token.to_string(),
                                     )),
                                     Err(e) => Err(object! {
-                                        error: "Could not authenticate user".to_string()
+                                        error: format!("Likely a formatting issue: {}", e),
                                     }),
                                 }
                             }
                             Err(e) => Err(object! {
-                                error: "Could not authenticate user".to_string()
+                                error: format!("Likely a formatting issue: {}", e),
                             }),
                         }
                     }
@@ -1195,7 +1204,7 @@ mod test {
     fn insert() {
         let mut client = setup();
 
-        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
         match Server::insert_user(&mut client, json_user) {
             Ok(result) => {
                 assert_eq!(result["user"]["name"].as_str().unwrap(), "Kurt");
@@ -1236,17 +1245,10 @@ mod test {
         let uid = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
 
         let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
-        let token = "test";
+        let uuid_token = Uuid::new_v4().to_simple().to_string();
 
-        match Server::get_user(&mut client, uid, token) {
-            Err(result) => {
-                assert_eq!(
-                    result,
-                    object! {
-                        error: "UserId not found".to_string()
-                    }
-                );
-            }
+        match Server::get_user(&mut client, uid, uuid_token.as_str()) {
+            Err(result) => {}
             _ => {
                 panic!("UserID 00000000-0000-0000-0000-000000000000 should not be found.")
             }
@@ -1289,7 +1291,7 @@ mod test {
         // Insert user.
         let mut client = setup();
 
-        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
 
         // Query for that user.
         match Server::insert_user(&mut client, json_user) {
