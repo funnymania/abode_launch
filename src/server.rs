@@ -331,6 +331,7 @@ impl Server {
                                                     "GET" => {
                                                         let mut status_code = String::new();
 
+                                                        let token = "test";
                                                         let content = match Uuid::parse_str(
                                                             &api_call.value[1],
                                                         ) {
@@ -338,6 +339,7 @@ impl Server {
                                                                 match Server::get_user(
                                                                     &mut client,
                                                                     user_uuid,
+                                                                    token,
                                                                 ) {
                                                                     Ok(user) => {
                                                                         status_code =
@@ -845,11 +847,31 @@ impl Server {
         (user, host, ext)
     }
 
+    /// Requires a user's session token which authenticates their identity.
+    /// For internal usage not involving your users, use get_user_backstage()
     pub fn get_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         uid: uuid::Uuid,
+        sess_token: &str,
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
+        let plain_sess_token = Server::decrypt(sess_token);
+        let res = client.query(
+            "SELECT * FROM user_device WHERE sess_token = $1",
+            &[&plain_sess_token],
+        );
+
+        //Validate that this is the right customer's user (session token)
+        match res {
+            Ok(rows) => {
+                if rows.len() != 1 {
+                    return Err(object! {error: String::from("User must log-in again.")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
+        }
+
+        //TODO: Validate that this is the right customer (api token)
         let res = client.query("SELECT * FROM users WHERE id = $1", &[&uid]);
         match res {
             Ok(rows) => {
@@ -1095,6 +1117,10 @@ impl Server {
 
         browns.to_owned()
     }
+
+    pub fn decrypt(target: &str) -> String {
+        target.to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -1139,13 +1165,30 @@ mod test {
         );
     }
 
+    #[test]
     fn authenticate_valid_creds() {
         let mut client = setup();
-        //TODO: Login with valid creds
 
-        //TODO: Start a session for that user
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"quirkle\" } }";
 
-        //TODO: Return User
+        // Insert user.
+        match Server::insert_user(&mut client, json_user) {
+            Ok(result) => {
+                let uid = Uuid::parse_str(result["user"]["id"].as_str().unwrap()).unwrap();
+
+                // Log the user in.
+                match Server::authenticate_user(&mut client, json_user) {
+                    Ok(token) => match Server::get_user(&mut client, uid, token.1.as_str()) {
+                        Err(e) => panic!("Ouch: {}", e),
+                        _ => (),
+                    },
+                    Err(e) => panic!("{}", e),
+                }
+            }
+            Err(e) => {
+                panic!("{}", e)
+            }
+        }
     }
 
     #[test]
@@ -1193,8 +1236,9 @@ mod test {
         let uid = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
 
         let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+        let token = "test";
 
-        match Server::get_user(&mut client, uid) {
+        match Server::get_user(&mut client, uid, token) {
             Err(result) => {
                 assert_eq!(
                     result,
@@ -1214,20 +1258,23 @@ mod test {
         // Insert user.
         let mut client = setup();
 
-        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
+        let json_user = "{ \"user\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
 
-        // Query for that user.
+        let login_attempt = "{ \"user\": { \"name\": \"Kurt\", \"pass\": \"borb\" } }";
+
+        // Add user to test.
         match Server::insert_user(&mut client, json_user) {
             Ok(result) => {
-                let uid = Uuid::parse_str(result["user"]["id"].as_str().unwrap()).unwrap();
-                match Server::get_user(&mut client, uid) {
-                    Ok(user) => {
-                        assert_eq!(
-                            user["user"]["id"].as_str().unwrap(),
-                            uid.to_simple().to_string()
-                        );
-                        assert_eq!(user["user"]["name"], result["user"]["name"]);
-                    }
+                // Authenticate user.
+                match Server::authenticate_user(&mut client, json_user) {
+                    Ok(token) => match Server::get_user(
+                        &mut client,
+                        Uuid::parse_str(token.0["user"]["id"].as_str().unwrap()).unwrap(),
+                        token.1.as_str(),
+                    ) {
+                        Err(e) => panic!("{}", e),
+                        _ => (),
+                    },
                     Err(e) => panic!("{}", e),
                 }
             }
