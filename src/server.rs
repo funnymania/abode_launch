@@ -155,6 +155,28 @@ impl Server {
                             _ => (),
                         }
                     }
+                    "/register" => {
+                        let content = match Server::get_page("/views/register.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            _ => (),
+                        }
+
+                    }
                     "/login-page" => {
                         let content = match Server::get_page("/views/login.html") {
                                 Ok(html) => html,
@@ -347,7 +369,8 @@ impl Server {
                                                                         status_code =
                                                                             "401 Unauthorized"
                                                                                 .to_string();
-                                                                        object! { error: "API requires authentication".to_string()}
+                                                                        let err_json = object! { error: "API requires authentication".to_string()};
+                                                                        err_json.dump()
                                                                     }
                                                                     Ok(_) => {
                                                                         match Server::get_identity(
@@ -360,14 +383,14 @@ impl Server {
                                                                                     "200 OK"
                                                                                         .to_string(
                                                                                         );
-                                                                                user
+                                                                                user.dump()
                                                                             }
                                                                             Err(e) => {
                                                                                 status_code =
                                                                                     "404 Not Found"
                                                                                         .to_string(
                                                                                         );
-                                                                                e
+                                                                                e.dump()
                                                                             }
                                                                         }
                                                                     }
@@ -376,7 +399,8 @@ impl Server {
                                                             Err(e) => {
                                                                 status_code =
                                                                     "404 Not Found".to_string();
-                                                                object! {error: e.to_string()}
+                                                                let err_json = object! {error: e.to_string()};
+                                                                err_json.dump()
                                                             }
                                                         };
 
@@ -408,18 +432,19 @@ impl Server {
                                                                 ) {
                                                                     Ok(user) => {
                                                                         status_code = "201 Created".to_string();
-                                                                        user
+                                                                        user.dump()
                                                                     }
                                                                     Err(msg) => {
                                                                         status_code = "500 Internal Server Error".to_string();
-                                                                        msg
+                                                                        msg.dump()
                                                                     }
                                                                 },
                                                                 Err(_) => {
                                                                         status_code =
                                                                             "401 Unauthorized"
                                                                                 .to_string();
-                                                                        object! { error: "API requires authentication".to_string()}
+                                                                        let err_json = object! { error: "API requires authentication".to_string()};
+                                                                        err_json.dump()
                                                                 }
                                                             };
 
@@ -460,13 +485,13 @@ impl Server {
                                                                         Ok(user) => {
                                                                             status_code =
                                                                                 "200 OK".to_string();
-                                                                            user
+                                                                            user.dump()
                                                                         }
                                                                         Err(e) => {
                                                                             status_code =
                                                                                 "404 Not Found"
                                                                                     .to_string();
-                                                                            e
+                                                                            e.dump()
                                                                         }
                                                                     }
                                                                 }
@@ -474,7 +499,8 @@ impl Server {
                                                                         status_code =
                                                                             "401 Unauthorized"
                                                                                 .to_string();
-                                                                        object! { error: "API requires authentication".to_string()}
+                                                                        let err_json = object! { error: "API requires authentication".to_string()};
+                                                                        err_json.dump()
                                                                 }
                                                             };
 
@@ -513,11 +539,11 @@ impl Server {
                                                                         Ok(user) => {
                                                                             status_code = "201 Created".to_string();
                                                                             token = user.1;
-                                                                            user.0
+                                                                            user.0.dump()
                                                                         }
                                                                         Err(msg) => {
                                                                             status_code = "404 Not Found".to_string();
-                                                                            msg
+                                                                            msg.dump()
                                                                         }
                                                                     };
 
@@ -920,8 +946,14 @@ impl Server {
         let mut client = client.lock().unwrap();
 
         match client.query("UPDATE api_token SET reg_user = reg_user + 1 WHERE id = $1", &[api_token]) {
-            Ok(rows) => Ok(object! { count: rows[0].get::<&str, i32>("reg_user") }),
-            Err(e) => Err(object! { error: String::from("Token does not exist")}),
+            Ok(rows) => {
+                if rows.len() == 0 {
+                    Err(object! { error: String::from("API token not found.")})
+                } else {
+                    Ok(object! { count: rows[0].get::<&str, i32>("reg_user") })
+                }
+            }
+            Err(e) => Err(object! { error: String::from("Some formatting issue on updating API token")}),
 
         }
     }
