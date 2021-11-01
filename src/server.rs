@@ -448,27 +448,27 @@ impl Server {
                                                                 &api_token,
                                                             ) {
                                                                 Ok(_) => {
-                                                                match Server::update_user(
-                                                                    &mut client,
-                                                                    &body,
-                                                                    Uuid::parse_str(
-                                                                        &api_call.value[1],
-                                                                    )
-                                                                    .unwrap(),
-                                                                    token,
-                                                                ) {
-                                                                    Ok(user) => {
-                                                                        status_code =
-                                                                            "200 OK".to_string();
-                                                                        user
+                                                                    match Server::update_user(
+                                                                        &mut client,
+                                                                        &body,
+                                                                        Uuid::parse_str(
+                                                                            &api_call.value[1],
+                                                                        )
+                                                                        .unwrap(),
+                                                                        token,
+                                                                    ) {
+                                                                        Ok(user) => {
+                                                                            status_code =
+                                                                                "200 OK".to_string();
+                                                                            user
+                                                                        }
+                                                                        Err(e) => {
+                                                                            status_code =
+                                                                                "404 Not Found"
+                                                                                    .to_string();
+                                                                            e
+                                                                        }
                                                                     }
-                                                                    Err(e) => {
-                                                                        status_code =
-                                                                            "404 Not Found"
-                                                                                .to_string();
-                                                                        e
-                                                                    }
-                                                                }
                                                                 }
                                                                 Err(_) => {
                                                                         status_code =
@@ -500,27 +500,34 @@ impl Server {
                                             "token" => {
                                                 match str_req.0.as_str() {
                                                     "POST" => {
+                                                        Server::print_bytes(&req);
                                                         match Server::extract_body(&req) {
                                                             Ok(body) => {
                                                                 let mut token = String::new();
+                                                                let mut status_code = String::new();
                                                                 let mut content =
                                                                     match Server::authenticate_user(
                                                                         &mut client,
                                                                         &body,
                                                                     ) {
                                                                         Ok(user) => {
+                                                                            status_code = "201 Created".to_string();
                                                                             token = user.1;
                                                                             user.0
                                                                         }
-                                                                        Err(msg) => msg,
+                                                                        Err(msg) => {
+                                                                            status_code = "404 Not Found".to_string();
+                                                                            msg
+                                                                        }
                                                                     };
 
                                                                 //TODO: what if user has cookies off?
                                                                 response = format!(
-                                                                        "HTTP/1.1 201 Created\r\n\
-                                                                        Set-Cookie: token={}; Expires=Tue, 19 Jan 2038;  Secure; HttpOnly\r\n
+                                                                        "HTTP/1.1 {}\r\n\
+                                                                        Set-Cookie: sess_token={}; Expires=Tue, 19 Jan 2038; Secure; HttpOnly\r\n
                                                                         Content-Type: text/html\r\n\
                                                                         Content-Length: {}\r\n\r\n{}",
+                                                                        status_code,
                                                                         token,
                                                                         content.len(),
                                                                         content
@@ -743,7 +750,7 @@ impl Server {
     pub fn whats_reqd(req: String) -> (String, String) {
         let mut lines: Vec<&str> = req.lines().collect();
         let first_line: Vec<&str> = lines[0].split(" ").collect();
-        println!("What is this: {}", first_line[0]);
+        println!("Request Type: {}", first_line[0]);
         match first_line[0] {
             "GET" => (String::from("GET"), String::from(first_line[1])),
             "POST" => (String::from("POST"), String::from(first_line[1])),
@@ -972,9 +979,6 @@ impl Server {
         }
     }
 
-    //TODO: A user should be just a UUID (as an index), a passphrase, and at least a second passphrase (aka
-    //username). Identity_Servicers (aka our customers) have a table for their users which are
-    //actually identities. (id_id, app_id, app_configs, app_attributes)
     //TODO: user_identity table (id_id, user_id, name, configs, attributes) is the table. get_user
     //would mostly only be used for our own information. However there is another table,
     //user_general (this contains information that all identities might use, such as mailing
@@ -1137,17 +1141,17 @@ impl Server {
         // Break it up by '/' characters
         let split: Vec<&str> = path.split('/').collect();
 
-        if split.len() == 0 {
+        if split.len() < 3 {
             return None;
         }
 
         // First str should be v#
-        if !Server::is_version_str(split[0]) {
+        if !Server::is_version_str(split[1]) {
             return None;
         }
 
         let mut value = Vec::new();
-        for i in 1..split.len() {
+        for i in 2..split.len() {
             if split[i] != "" {
                 value.push(split[i].to_string());
             } else {
@@ -1156,7 +1160,7 @@ impl Server {
         }
 
         Some(ApiString {
-            version: split[0].to_string(),
+            version: split[1].to_string(),
             value,
         })
     }
@@ -1227,15 +1231,21 @@ impl Server {
             &[&servicer_id, &api_token, &name],
         ) {
             Ok(rows) => {
-                let mut table_name = String::from("config_");
+                let mut table_name = String::from("\"config_");
                 table_name += name;
-                match client.query("CREATE TABLE $1 (id_id uuid, fav_color varchar(15), privacy_level integer, search_pref jsonb)", &[&table_name]) {
+                table_name +="\"";
+                let create_query_str = format!("CREATE TABLE {} (id_id uuid, fav_color varchar(15), privacy_level integer, search_pref json)", table_name);
+                match client.simple_query(create_query_str.as_str()) {
                     Err(e) => Err(object!{ error: format!("Error creating config table for servicer: {}", e) }),
                     _ => Ok(())
                 }
             }
             Err(e) => Err(object! { error: format!("Could not insert {}", e)}),
         }
+    }
+
+    pub fn print_bytes(req: &[u8]) {
+        println!("{}", String::from_utf8_lossy(req).trim_matches(char::from(0)));
     }
 
     //TODO: Multi-device login
@@ -1341,8 +1351,6 @@ impl Server {
 mod test {
     use super::*;
 
-    //TODO: Get table structure (column names, qualities) from test_users before dropping it.
-    //TODO: Establish how to add columns to users in general.
     fn setup() -> Arc<Mutex<postgres::Client>> {
         // Start postgres client
         let mut client = Arc::new(Mutex::new(
@@ -1365,8 +1373,10 @@ mod test {
 
         drop(client_clone);
 
-        //TODO: Create table servicer, from servicer name 'wuh corp' create table of config values.
-        Server::add_servicer(&mut client_new_scope, "wuh??? corp");
+        match Server::add_servicer(&mut client_new_scope, "wuh??? corp") {
+            Err(e) => println!("Wrong: {:?}", e),
+            _ => {}
+        }
 
         client
     }

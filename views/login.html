@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 	<head>
 		<meta charset="utf-8">
@@ -22,7 +23,7 @@
 	<body>
 		<input id="uname" placeholder="Enter username"></input>
 		<input id="pass" placeholder="Enter password"></input>
-		<button id="submit" onclick="postCreds">vamos</button>
+		<button id="submit" onclick="postCreds()">vamos</button>
 		<script>
 			let u = document.getElementById('uname');
 			let p = document.getElementById('pass');
@@ -39,19 +40,25 @@
 
 			function postCreds() {
 				let body = {
-					user: u.value,
-					pass: p.value
+					identity: {
+						name: u.value,
+						pass: p.value
+					}
 				}
 
 				// Form post request
 				let post = {
+					credentials: 'include',
 					method: 'POST',
-					body,
-					route: 'login'
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(body),
+					route: 'login',
 				}
 
 				// request, display response
-				fetch('/login/', post)
+				fetch('/v1/token', post)
 					.then(res => res.json())
 					.then(res => {
 						if (res.code === 'Success') {
