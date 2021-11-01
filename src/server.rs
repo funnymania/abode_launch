@@ -339,26 +339,37 @@ impl Server {
                                                             &api_call.value[1],
                                                         ) {
                                                             Ok(user_uuid) => {
-                                                                Server::increment_gets(
+                                                                match Server::increment_gets(
                                                                     &mut client,
-                                                                    api_token,
-                                                                );
-
-                                                                match Server::get_identity(
-                                                                    &mut client,
-                                                                    user_uuid,
-                                                                    token,
+                                                                    &api_token,
                                                                 ) {
-                                                                    Ok(user) => {
+                                                                    Err(_) => {
                                                                         status_code =
-                                                                            "200 OK".to_string();
-                                                                        user
-                                                                    }
-                                                                    Err(e) => {
-                                                                        status_code =
-                                                                            "404 Not Found"
+                                                                            "401 Unauthorized"
                                                                                 .to_string();
-                                                                        e
+                                                                        object! { error: "API requires authentication".to_string()}
+                                                                    }
+                                                                    Ok(_) => {
+                                                                        match Server::get_identity(
+                                                                            &mut client,
+                                                                            user_uuid,
+                                                                            token,
+                                                                        ) {
+                                                                            Ok(user) => {
+                                                                                status_code =
+                                                                                    "200 OK"
+                                                                                        .to_string(
+                                                                                        );
+                                                                                user
+                                                                            }
+                                                                            Err(e) => {
+                                                                                status_code =
+                                                                                    "404 Not Found"
+                                                                                        .to_string(
+                                                                                        );
+                                                                                e
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -384,23 +395,39 @@ impl Server {
                                                     }
                                                     "POST" => match Server::extract_body(&req) {
                                                         Ok(body) => {
-                                                            Server::increment_registered_users(
-                                                                &mut client,
-                                                                api_token,
-                                                            );
+                                                            let mut status_code = String::new();
                                                             let mut content =
+                                                            match Server::increment_registered_users(
+                                                                &mut client,
+                                                                &api_token,
+                                                            ) {
+                                                                Ok(_) => 
                                                                 match Server::insert_user(
                                                                     &mut client,
                                                                     &body,
                                                                 ) {
-                                                                    Ok(user) => user,
-                                                                    Err(msg) => msg,
-                                                                };
+                                                                    Ok(user) => {
+                                                                        status_code = "201 Created".to_string();
+                                                                        user
+                                                                    }
+                                                                    Err(msg) => {
+                                                                        status_code = "500 Internal Server Error".to_string();
+                                                                        msg
+                                                                    }
+                                                                },
+                                                                Err(_) => {
+                                                                        status_code =
+                                                                            "401 Unauthorized"
+                                                                                .to_string();
+                                                                        object! { error: "API requires authentication".to_string()}
+                                                                }
+                                                            };
 
                                                             response = format!(
-                                                                        "HTTP/1.1 201 Created\r\n\
+                                                                        "HTTP/1.1 {}\r\n\
                                                                         Content-Type: text/html\r\n\
                                                                         Content-Length: {}\r\n\r\n{}",
+                                                                        status_code,
                                                                         content.len(),
                                                                         content
                                                                     );
@@ -416,11 +443,11 @@ impl Server {
                                                         Ok(body) => {
                                                             let mut status_code = String::new();
                                                             let token = "test";
-                                                            Server::increment_updates(
+                                                            let content = match Server::increment_updates(
                                                                 &mut client,
-                                                                api_token,
-                                                            );
-                                                            let mut content =
+                                                                &api_token,
+                                                            ) {
+                                                                Ok(_) => {
                                                                 match Server::update_user(
                                                                     &mut client,
                                                                     &body,
@@ -441,7 +468,15 @@ impl Server {
                                                                                 .to_string();
                                                                         e
                                                                     }
-                                                                };
+                                                                }
+                                                                }
+                                                                Err(_) => {
+                                                                        status_code =
+                                                                            "401 Unauthorized"
+                                                                                .to_string();
+                                                                        object! { error: "API requires authentication".to_string()}
+                                                                }
+                                                            };
 
                                                             response = format!(
                                                                         "HTTP/1.1 {}\r\n\
@@ -455,6 +490,7 @@ impl Server {
                                                             stream
                                                                 .write_all(response.as_bytes())
                                                                 .unwrap();
+
                                                         }
                                                         Err(msg) => {}
                                                     },
@@ -865,20 +901,30 @@ impl Server {
         (user, host, ext)
     }
 
-    pub fn increment_gets(client: &mut Arc<Mutex<postgres::Client>>, api_token: Uuid) {
+    pub fn increment_gets(client: &mut Arc<Mutex<postgres::Client>>, api_token: &Uuid) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
 
-        client.execute("UPDATE api_token SET get_user = get_user + 1", &[]);
+        match client.query("UPDATE api_token SET get_user = get_user + 1 WHERE id = $1", &[api_token]) {
+            Ok(rows) => Ok(object! { count: rows[0].get::<&str, i32>("get_user") }),
+            Err(e) => Err(object! { error: String::from("Token does not exist")}),
+        }
     }
-    pub fn increment_registered_users(client: &mut Arc<Mutex<postgres::Client>>, api_token: Uuid) {
+    pub fn increment_registered_users(client: &mut Arc<Mutex<postgres::Client>>, api_token: &Uuid)  -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
 
-        client.execute("UPDATE api_token SET reg_user = reg_user + 1", &[]);
+        match client.query("UPDATE api_token SET reg_user = reg_user + 1 WHERE id = $1", &[api_token]) {
+            Ok(rows) => Ok(object! { count: rows[0].get::<&str, i32>("reg_user") }),
+            Err(e) => Err(object! { error: String::from("Token does not exist")}),
+
+        }
     }
-    pub fn increment_updates(client: &mut Arc<Mutex<postgres::Client>>, api_token: Uuid) {
+    pub fn increment_updates(client: &mut Arc<Mutex<postgres::Client>>, api_token: &Uuid)  -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
 
-        client.execute("UPDATE api_token SET update_user = update_user + 1", &[]);
+        match client.query("UPDATE api_token SET update_user = update_user + 1 WHERE id = $1", &[api_token]) {
+            Ok(rows) => Ok(object! { count: rows[0].get::<&str, i32>("update_user") }),
+            Err(e) => Err(object! { error: String::from("Token does not exist")}),
+        }
     }
 
     /// Requires a user's session token which authenticates their identity.
@@ -906,7 +952,6 @@ impl Server {
             Err(e) => return Err(object! {error: e.to_string()}),
         }
 
-        //TODO: Validate that this is the right customer (api token)
         let res = client.query("SELECT * FROM identity WHERE id = $1", &[&id_id]);
         match res {
             Ok(rows) => {
