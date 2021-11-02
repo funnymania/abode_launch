@@ -45,8 +45,9 @@ impl Server {
         //It is not an Error for this buffer to be too small, so we won't catch it
         let mut req = [0; 2048];
 
-        //TODO: Get api_token from request.
-        let api_token = Uuid::new_v4();
+        //TODO: Implement the ability to limit use of this token by IP or Host.
+        //API token only used for testing.
+        let wuh_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         // Split to different actions
         let mut response = String::new();
@@ -363,7 +364,7 @@ impl Server {
                                                             Ok(user_uuid) => {
                                                                 match Server::increment_gets(
                                                                     &mut client,
-                                                                    &api_token,
+                                                                    &wuh_token,
                                                                 ) {
                                                                     Err(_) => {
                                                                         status_code =
@@ -377,6 +378,7 @@ impl Server {
                                                                             &mut client,
                                                                             user_uuid,
                                                                             token,
+                                                                            &wuh_token
                                                                         ) {
                                                                             Ok(user) => {
                                                                                 status_code =
@@ -423,12 +425,13 @@ impl Server {
                                                             let mut content =
                                                             match Server::increment_registered_users(
                                                                 &mut client,
-                                                                &api_token,
+                                                                &wuh_token,
                                                             ) {
                                                                 Ok(_) => 
                                                                 match Server::insert_user(
                                                                     &mut client,
                                                                     &body,
+                                                                    &wuh_token
                                                                 ) {
                                                                     Ok(user) => {
                                                                         status_code = "201 Created".to_string();
@@ -470,7 +473,7 @@ impl Server {
                                                             let token = "test";
                                                             let content = match Server::increment_updates(
                                                                 &mut client,
-                                                                &api_token,
+                                                                &wuh_token,
                                                             ) {
                                                                 Ok(_) => {
                                                                     match Server::update_user(
@@ -481,6 +484,7 @@ impl Server {
                                                                         )
                                                                         .unwrap(),
                                                                         token,
+                                                                        &wuh_token
                                                                     ) {
                                                                         Ok(user) => {
                                                                             status_code =
@@ -535,6 +539,7 @@ impl Server {
                                                                     match Server::authenticate_user(
                                                                         &mut client,
                                                                         &body,
+                                                                        &wuh_token
                                                                     ) {
                                                                         Ok(user) => {
                                                                             status_code = "201 Created".to_string();
@@ -972,6 +977,7 @@ impl Server {
         client: &mut Arc<Mutex<postgres::Client>>,
         id_id: uuid::Uuid,
         sess_token: &str,
+        &wuh_token: &uuid::Uuid
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
         let plain_sess_token = Server::decrypt(sess_token);
@@ -986,6 +992,16 @@ impl Server {
             Ok(rows) => {
                 if rows.len() != 1 {
                     return Err(object! {error: String::from("User must log-in again.")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
+        }
+
+        //Validate that request is coming from a paying customer
+        match client.query("SELECT * FROM servicer WHERE api_token = $1", &[&wuh_token]) {
+            Ok(rows) => {
+                if rows.len() != 1 {
+                    return Err(object! {error: String::from("Must provide a valid API token to use service")});
                 }
             }
             Err(e) => return Err(object! {error: e.to_string()}),
@@ -1025,6 +1041,7 @@ impl Server {
         json_user: &str,
         id_id: uuid::Uuid,
         token: &str,
+        &wuh_token: &uuid::Uuid
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
         let uuid_res = Uuid::parse_str(token);
@@ -1032,6 +1049,16 @@ impl Server {
         match uuid_res {
             Ok(token) => uuid_token = token,
             Err(e) => return Err(object! {error: String::from("Token is not valid")}),
+        }
+        
+        //Validate that request is coming from a paying customer
+        match client.query("SELECT * FROM servicer WHERE api_token = $1", &[&wuh_token]) {
+            Ok(rows) => {
+                if rows.len() != 1 {
+                    return Err(object! {error: String::from("Must provide a valid API token to use service")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
         }
 
         //Validate that this is the right customer's user (session token), and that they own the
@@ -1101,6 +1128,7 @@ impl Server {
     pub fn insert_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         json_user: &str,
+        &wuh_token: &uuid::Uuid
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut uid = Uuid::new_v4();
         let mut client = client.lock().unwrap();
@@ -1116,6 +1144,16 @@ impl Server {
             }
 
             break;
+        }
+
+        //Validate that request is coming from a paying customer
+        match client.query("SELECT * FROM servicer WHERE api_token = $1", &[&wuh_token]) {
+            Ok(rows) => {
+                if rows.len() != 1 {
+                    return Err(object! {error: String::from("Must provide a valid API token to use service")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
         }
 
         let user_obj = json::parse(json_user).unwrap();
@@ -1222,23 +1260,28 @@ impl Server {
     pub fn add_servicer(
         client: &mut Arc<Mutex<postgres::Client>>,
         name: &str,
+        test_token: Option<Uuid>
     ) -> Result<(), json::JsonValue> {
         let mut client = client.lock().unwrap();
 
         //Generate servicer id.
         let mut servicer_id = Uuid::new_v4();
-        loop {
-            if client
-                .query("SELECT * FROM servicer WHERE id = $1", &[&servicer_id])
-                .unwrap()
-                .len()
-                == 1
-            {
-                servicer_id = Uuid::new_v4();
-                continue;
-            }
+        if test_token == None {
+            loop {
+                if client
+                    .query("SELECT * FROM servicer WHERE id = $1", &[&servicer_id])
+                    .unwrap()
+                    .len()
+                    == 1
+                {
+                    servicer_id = Uuid::new_v4();
+                    continue;
+                }
 
-            break;
+                break;
+            }
+        } else {
+            servicer_id = test_token.unwrap();
         }
 
         //Generate api token.
@@ -1284,6 +1327,7 @@ impl Server {
     pub fn authenticate_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         body: &str,
+        &wuh_token: &uuid::Uuid
     ) -> Result<(json::JsonValue, String), json::JsonValue> {
         //      Extract pass, hash it
         let user_obj = json::parse(body).unwrap();
@@ -1300,7 +1344,18 @@ impl Server {
         let pass_plain = pass_plain.unwrap();
 
         let hashed_pass = Server::hash(pass_plain);
+
         let mut client = client.lock().unwrap();
+
+        //Validate that request is coming from a paying customer
+        match client.query("SELECT * FROM servicer WHERE api_token = $1", &[&wuh_token]) {
+            Ok(rows) => {
+                if rows.len() != 1 {
+                    return Err(object! {error: String::from("Must provide a valid API token to use service")});
+                }
+            }
+            Err(e) => return Err(object! {error: e.to_string()}),
+        }
 
         if user_obj["identity"]["name"].is_string() && user_obj["identity"]["pass"].is_string() {
             //      Select user if they match
@@ -1395,7 +1450,7 @@ mod test {
 
         // Remove test_tables
         client_clone.execute("DELETE FROM users", &[]);
-        client_clone.execute("DELETE FROM servicer", &[]);
+        // client_clone.execute("DELETE FROM servicer", &[]);
 
         // Create create test_tables
         // client_clone.execute(
@@ -1405,7 +1460,9 @@ mod test {
 
         drop(client_clone);
 
-        match Server::add_servicer(&mut client_new_scope, "wuh??? corp") {
+        let wuh_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
+
+        match Server::add_servicer(&mut client_new_scope, "wuh??? corp", Some(wuh_token)) {
             Err(e) => println!("Wrong: {:?}", e),
             _ => {}
         }
@@ -1416,12 +1473,13 @@ mod test {
     #[test]
     fn authenticate_invalid_creds() {
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let body = "{ \"identity\": { \"name\": \"Squirck\", \"pass\": \"fentonBalm\" } }";
 
         // SELECT user.
         assert_eq!(
-            Server::authenticate_user(&mut client, body),
+            Server::authenticate_user(&mut client, body, &test_token),
             Err(object! {
                 error: "User and pass not found. Try again.".to_string()
             })
@@ -1431,17 +1489,18 @@ mod test {
     #[test]
     fn authenticate_valid_creds() {
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"quirkle\" } }";
 
         // Insert user.
-        match Server::insert_user(&mut client, json_user) {
+        match Server::insert_user(&mut client, json_user, &test_token) {
             Ok(result) => {
                 let uid = Uuid::parse_str(result["identity"]["id"].as_str().unwrap()).unwrap();
 
                 // Log the user in.
-                match Server::authenticate_user(&mut client, json_user) {
-                    Ok(token) => match Server::get_identity(&mut client, uid, token.1.as_str()) {
+                match Server::authenticate_user(&mut client, json_user, &test_token) {
+                    Ok(token) => match Server::get_identity(&mut client, uid, token.1.as_str(), &test_token) {
                         Err(e) => panic!("Ouch: {}", e),
                         _ => (),
                     },
@@ -1457,9 +1516,10 @@ mod test {
     #[test]
     fn insert() {
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
-        match Server::insert_user(&mut client, json_user) {
+        match Server::insert_user(&mut client, json_user, &test_token) {
             Ok(result) => {
                 assert_eq!(result["identity"]["name"].as_str().unwrap(), "Kurt");
             }
@@ -1472,13 +1532,14 @@ mod test {
     #[test]
     fn update_id_not_found() {
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let uid = Uuid::new_v4();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
 
         let token = Uuid::new_v4().to_simple().to_string();
-        match Server::update_user(&mut client, json_user, uid, token.as_str()) {
+        match Server::update_user(&mut client, json_user, uid, token.as_str(), &test_token) {
             Err(result) => {
                 assert_eq!(
                     result,
@@ -1496,13 +1557,14 @@ mod test {
     #[test]
     fn select_id_not_found() {
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let uid = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\" } }";
         let uuid_token = Uuid::new_v4().to_simple().to_string();
 
-        match Server::get_identity(&mut client, uid, uuid_token.as_str()) {
+        match Server::get_identity(&mut client, uid, uuid_token.as_str(), &test_token) {
             Err(result) => {}
             _ => {
                 panic!("UserID 00000000-0000-0000-0000-000000000000 should not be found.")
@@ -1514,20 +1576,22 @@ mod test {
     fn select_identity() {
         // Insert user.
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
 
         let login_attempt = "{ \"identity\": { \"name\": \"Kurt\", \"pass\": \"borb\" } }";
 
         // Add user to test.
-        match Server::insert_user(&mut client, json_user) {
+        match Server::insert_user(&mut client, json_user, &test_token) {
             Ok(result) => {
                 // Authenticate user.
-                match Server::authenticate_user(&mut client, json_user) {
+                match Server::authenticate_user(&mut client, json_user, &test_token) {
                     Ok(token) => match Server::get_identity(
                         &mut client,
                         Uuid::parse_str(token.0["identity"]["id"].as_str().unwrap()).unwrap(),
                         token.1.as_str(),
+                        &test_token
                     ) {
                         Err(e) => panic!("{}", e),
                         _ => (),
@@ -1545,25 +1609,26 @@ mod test {
     fn update_identity() {
         // Insert user.
         let mut client = setup();
+        let test_token = Uuid::parse_str("00ec183d-7446-4511-b624-4349e385d730").unwrap();
 
         let json_user = "{ \"identity\": { \"name\": \"Kurt\", \"id\": \"00000000-0000-0000-0000-000000000000\", \"pass\": \"borb\" } }";
 
         // Query for that user.
-        match Server::insert_user(&mut client, json_user) {
+        match Server::insert_user(&mut client, json_user, &test_token) {
             Ok(result) => {
                 let id_id = Uuid::parse_str(result["identity"]["id"].as_str().unwrap()).unwrap();
                 let authenticating_user = format!(
                     "{{ \"identity\": {{ \"name\": \"Kurt\", \"id\": \"{}\", \"pass\": \"borb\" }} }}",
                     id_id
                 );
-                match Server::authenticate_user(&mut client, authenticating_user.as_str()) {
+                match Server::authenticate_user(&mut client, authenticating_user.as_str(), &test_token) {
                     Ok(token) => {
                         let changed_user = format!("{{ \"identity\": {{ \"name\": \"Cheri\", \"id\": \"{}\", \"pass\": \"borb\" }} }}", id_id);
                         match Server::update_user(
                             &mut client,
                             changed_user.as_str(),
                             id_id,
-                            token.1.as_str(),
+                            token.1.as_str(), &test_token,
                         ) {
                             Ok(user) => {
                                 assert_eq!(user["identity"]["name"], String::from("Cheri"));
