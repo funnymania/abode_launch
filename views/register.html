@@ -2,7 +2,7 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>Spout Login</title>
+		<title>Spout (id:id) Register</title>
 		<meta name="description" content="Login Test">
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 		<link rel="icon" href="http://funnymania.lol/favicon.ico">
@@ -23,10 +23,7 @@
 	<body>
 		<input id="uname" placeholder="Enter username"></input>
 		<input id="pass" placeholder="Enter password"></input>
-		<button id="submit" onclick="postCreds()">vamos</button>
-		<div>
-				<a href="/register">Register a new identity</a>
-		</div>
+		<button id="submit" onclick="regUser()">Join up.</button>
 		<script>
 			let u = document.getElementById('uname');
 			let p = document.getElementById('pass');
@@ -41,7 +38,7 @@
 				}
 			});
 
-			function postCreds() {
+			function regUser() {
 				let body = {
 					identity: {
 						name: u.value,
@@ -60,13 +57,18 @@
 				}
 
 				// request, display response
-				fetch('/v1/token', post)
+				fetch('/v1/identity', post)
 					.then(res => res.json())
 					.then(res => {
-						if (res.error !== undefined) {
-							console.log('Could not login, retry credentials');
-						} else {
-							location.href = '/user-profile';
+						if (res.code === 'Success') {
+							let resEl = document.getElementById('form-res');
+							resEl.innerHTML = 'Thanks! You\'ll be hearing from us.';
+						} else if (res.code === 'Dupe') {
+							let resEl = document.getElementById('form-res');
+							resEl.innerHTML = 'You are already subscribed!';
+						} else if (res.code === 'Email Format') {
+							let resEl = document.getElementById('form-res');
+							resEl.innerHTML = res.msg;
 						}
 					});
 			}
