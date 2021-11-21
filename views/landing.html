@@ -19,6 +19,8 @@
 				margin: 0px;	
 			}
 		</style>
+		<script type="application/javascript" src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js">
+		</script>
 	</head>
 	<body>
 		<div id="splash" class="section-no-flex"> 
@@ -76,6 +78,7 @@
 					<h3><button id="pay-button" class="pay-button">~Connect to MetaMask~</button></h3>
 					<h2>currently just a team of 1 person. 😩</h2>
 					<h3>operating with zero in a bank account of fame</h3>
+					<h3><button id="nft-button" class="pay-button hidden">Create your own Zoom Zap!</button></h3>
 				</div>
 			</div>
 		</div>
@@ -150,18 +153,56 @@
 		// Load ETH options.
 		window.addEventListener('load', () => {
 			if (window.ethereum) {
+				console.log('Ethereum context is present.');
 				try {
 					initPayButton()
+					initNftButton()
 				} catch (err) {
 					console.log('User denied account access')
 				}
 			} else if (window.web3) {
 				window.web3 = new Web3(web3.currentProvider);
 				initPayButton()
+				initNftButton()
 			} else {
 				console.log('No Metamask (or other Web3 Provider) installed')
 			}
 		})
+
+		// Write NFT.
+		const askContractToMintNft = async () => {
+			// Contracts address on a network.
+			const CONTRACT_ADDRESS = "0x4F37EDc6C9594648eAb2fed8841b1527D1d4C0bE";
+
+			// Load contract ABI
+			console.log('Fetching ABI');
+			const res = await fetch('/zoom-zaps');
+			const transistors = await res.json();
+			try {
+				const provider = new ethers.providers.Web3Provider(ethereum);
+				const signer = provider.getSigner();
+				const connectedContract = new ethers.Contract(CONTRACT_ADDRESS, transistors.abi, signer);
+				
+				console.log('Going to pop up wallet to pay gas');
+				let nftTxn = await connectedContract.makeNFT();
+
+				console.log("Mining... please wait");
+				await nftTxn.wait();
+
+				console.log(`Mined, see transaction: https://rinkeby.etherscan.io/tx/${nftTxn.hash}`)
+			} catch (error) {
+				console.log(error);
+			}
+		}
+
+		// Init NFT button.
+		let nftButton = document.getElementById('nft-button');
+		const initNftButton = () => {
+			nftButton.addEventListener('click', async () => {
+				console.log('NFT button clicked');
+				await askContractToMintNft();
+			});
+		};
 
 		let currentAccount;
 		let connected = false;
@@ -171,7 +212,14 @@
 				if (!connected) {
 					const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
 					currentAccount = accounts[0];
+					console.log('Using authorized account:', currentAccount);
 					payButton.innerHTML = '♥️💙♥️♥️💚 ~ tip us ~ 💚♥️♥️💙♥️';
+
+					// Reveal NFT mint button to screen.
+					nftButton.innerHTML = '☄️☃️✨ ~ Create your own Zoom Zap! ~ ☄️☃️✨';
+					nftButton.classList.remove('hidden');
+					nftButton.classList.add('revealed');
+
 					connected = true;
 				} else {
 					const paymentAddress = '0xCF6D436D10AD34029884066E71F5e4887eCd9aDb';

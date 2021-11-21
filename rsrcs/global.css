@@ -154,6 +154,14 @@ a {
     cursor: pointer;
 }
 
+.hidden {
+	visibility: hidden;
+}
+
+.revealed {
+	visibility: visible;
+}
+
 #release-schedule {
 	background-color: #96f20c;
     border-bottom: 24px dashed #8C0D53;

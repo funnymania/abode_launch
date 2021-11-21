@@ -112,6 +112,35 @@ impl Server {
                             Ok(num) => (),
                         }
                     }
+                    "/zoom-zaps" => {
+                        let mut content = Vec::new();
+                        match Server::get_file("/rsrcs/Transistors.json") {
+                            Ok(mut abi) => {
+                                abi.read_to_end(&mut content);
+                            }
+                            Err(e) => {
+                                format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                            }
+                        };
+
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                            Content-Type: application/json\r\n\
+                            Content-Length: {}\r\n\r\n",
+                            content.len(),
+                        );
+
+                        let mut byte_res: Vec<u8> = Vec::new();
+                        for byte in response.as_bytes() {
+                            byte_res.push(*byte);
+                        }
+
+                        for byte in content {
+                            byte_res.push(byte);
+                        }
+
+                        stream.write_all(&byte_res).unwrap();
+                    }
                     "/favicon.ico" => {
                         let mut content = Vec::new();
                         match Server::get_file("/rsrcs/favicon.png") {
@@ -1070,7 +1099,6 @@ impl Server {
     ) -> Result<json::JsonValue, json::JsonValue> {
         let mut client = client.lock().unwrap();
         let plain_sess_token = Server::decrypt(sess_token);
-        //FIXME: This might not be valid.
         let uuid_token = Uuid::parse_str(plain_sess_token.as_str()).unwrap();
         let res = client.query(
             "SELECT * FROM user_device WHERE sess_token = $1",
@@ -1215,8 +1243,9 @@ impl Server {
     /// Register a new user. A user may have many identities.
     /// When we authenticate, using a user's passphrases or session token, we are finding this
     /// information in 'users' and 'user_device' tables.
-    /// NO Authentication is done regarding 'identity', except to look up the appropriate uid,
+    /// NO Authentication is done on 'identity' alone, we look up the appropriate uid,
     /// to find corresponding passphrases at 'users'
+    //TODO: Implement monthly active users..
     pub fn insert_user(
         client: &mut Arc<Mutex<postgres::Client>>,
         json_user: &str,
