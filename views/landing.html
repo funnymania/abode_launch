@@ -76,9 +76,10 @@
 					<h3><a href="https://ko-fi.com/funnymania">Buy us a coffee</a></h3>
 					<h2>Tip us with crypto!</h2>
 					<h3><button id="pay-button" class="pay-button">~Connect to MetaMask~</button></h3>
-					<h2>currently just a team of 1 person. 😩</h2>
-					<h3>operating with zero in a bank account of fame</h3>
+					<h2>currently just a team of 1 person! 🙋✊</h2>
 					<h3><button id="nft-button" class="pay-button hidden">Create your own Zoom Zap!</button></h3>
+					<br>
+					<h3><a id="opensea-button" target="_blank" class="pay-button hidden" style="text-decoration: none;">🌊 View the Zoom Zap Collection on OpenSea</button></h3>
 				</div>
 			</div>
 		</div>
@@ -172,16 +173,23 @@
 		// Write NFT.
 		const askContractToMintNft = async () => {
 			// Contracts address on a network.
-			const CONTRACT_ADDRESS = "0x4F37EDc6C9594648eAb2fed8841b1527D1d4C0bE";
+			const CONTRACT_ADDRESS = "0x97477c5163CFebf7DEb502d9E5C90B587DF57370";
 
 			// Load contract ABI
 			console.log('Fetching ABI');
 			const res = await fetch('/zoom-zaps');
 			const transistors = await res.json();
+			let bornetokenId;
 			try {
 				const provider = new ethers.providers.Web3Provider(ethereum);
 				const signer = provider.getSigner();
 				const connectedContract = new ethers.Contract(CONTRACT_ADDRESS, transistors.abi, signer);
+
+				connectedContract.on("NewNFTMinted", (from, tokenId) => {
+					borneTokenId = tokenId;
+					console.log(from, tokenId.toNumber());
+					alert(`Your NFT is being created! It can take up to 10 minutes to show up on OpenSea, here is the link to it: https://testnets.opensea.io/assets/${CONTRACT_ADDRESS}/${tokenId.toNumber()}`);
+				});
 				
 				console.log('Going to pop up wallet to pay gas');
 				let nftTxn = await connectedContract.makeNFT();
@@ -190,6 +198,7 @@
 				await nftTxn.wait();
 
 				console.log(`Mined, see transaction: https://rinkeby.etherscan.io/tx/${nftTxn.hash}`)
+				alert(`Your NFT is borne! https://testnets.opensea.io/assets/${CONTRACT_ADDRESS}/${borneTokenId.toNumber()}`);
 			} catch (error) {
 				console.log(error);
 			}
@@ -200,7 +209,15 @@
 		const initNftButton = () => {
 			nftButton.addEventListener('click', async () => {
 				console.log('NFT button clicked');
-				await askContractToMintNft();
+				let chainId = await ethereum.request({ method: 'eth_chainId' });
+				console.log("Connected to chain " + chainId);
+
+				const rinkebyChainId = "0x4";
+				if (chainId !== rinkebyChainId) {
+					alert("Please connect to the Rinkeby Test Network to create an NFT");
+				} else {
+					await askContractToMintNft();
+				}
 			});
 		};
 
@@ -208,6 +225,7 @@
 		let connected = false;
 		const initPayButton = () => {
 			let payButton = document.getElementById('pay-button');
+			let openSeaButton = document.getElementById('opensea-button');
 			payButton.addEventListener('click', async () => {
 				if (!connected) {
 					const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
@@ -219,6 +237,9 @@
 					nftButton.innerHTML = '☄️☃️✨ ~ Create your own Zoom Zap! ~ ☄️☃️✨';
 					nftButton.classList.remove('hidden');
 					nftButton.classList.add('revealed');
+					openSeaButton.classList.remove('hidden');
+					openSeaButton.classList.add('revealed');
+					openSeaButton.setAttribute("href", "https://testnets.opensea.io/collection/transistors-transit-7qjlllophh");
 
 					connected = true;
 				} else {

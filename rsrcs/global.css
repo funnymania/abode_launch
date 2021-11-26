@@ -276,6 +276,33 @@ a {
     justify-content: center;
 }
 
+/**
+ * Plussies
+ */
+#plussy-feed {
+	display: flex;
+	padding: 10%;
+	justify-content: center;
+	flex-direction: column;
+	position: relative;
+}
+
+.plussy-container {
+	background-color: #407540;
+	margin-bottom: 10%;
+}
+
+.plussy-media {
+	background-color: #80a480;
+	height: 400px;
+}
+
+.plussy-desc {
+	height: 40px;
+	text-align: center;
+	background-color: #164016;
+}
+
 @keyframes spin-slow {
     0% {
 		transform: rotateZ(0deg);

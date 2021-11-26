@@ -112,6 +112,26 @@ impl Server {
                             Ok(num) => (),
                         }
                     }
+                    "/plussies" => {
+                        let content = match Server::get_page("/views/plussies.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            Ok(num) => (),
+                        }
+                    }
                     "/zoom-zaps" => {
                         let mut content = Vec::new();
                         match Server::get_file("/rsrcs/Transistors.json") {
