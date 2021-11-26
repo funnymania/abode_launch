@@ -25,7 +25,7 @@
 	<body>
 		<div id="plussy-feed">
 			<div id="most-recent" class="plussy-container">
-				<h3>A more recent Plussy</h3>
+				<div class="plussy-container-title">A more recent Plussy</div>
 				<!-- What network (ETH, Polygon, sol, etc) -->
 				<!-- Location on the network -->
 				<!-- Name (if it has one)-->
@@ -33,16 +33,114 @@
 				<div class="plussy-media"></div>
 				<div class="plussy-desc"></div>
 			</div>
-			<div id="users-plussy" class="plussy-container">
-				<h3>Your plussyspace</h3>
+			<button id="pay-button" class="pay-button">~ Connect to Web3 ~</button>
+			<div id="acc-plussy" class="plussy-container gone">
+				<div class="plussy-container-title">Your plussyspace</div>
 				<div class="plussy-media"></div>
 				<div class="plussy-desc"></div>
 			</div>
 		</div>
 		<h4>Com at me: <a href="https://twitter.com/_funnymania">https://twitter.com/_funnymania</h4>
 		<script>
-			// layout
-				flexbox
+			// Inform user they need to have a web3 provider such as MetaMask installed.
+			let web3Acc;
+			let web3Connected = false;
+			let payButton = document.getElementById('pay-button');
+			window.addEventListener('load', () => {
+				if (window.ethereum) {
+					console.log('Ethereum context is present.');
+					try {
+						let plussyContract = getContract('/plussy-abi', '0x237B1083A09E8B8D91C92b12a23c43013FF427B5');
+						setUpEvents(plussyContract);
+						renderMostRecentPlussy(plussyContract);
+					} catch (err) {
+						console.log('User denied account access')
+					}
+				} else if (window.web3) {
+					window.web3 = new Web3(web3.currentProvider);
+					initPayButton()
+					initNftButton()
+				} else {
+					console.log('No Metamask (or other Web3 Provider) installed')
+				}
+			});
+
+			// Connect to web3 account.
+			payButton.addEventListener('click', async() => {
+				const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+				web3Acc = accounts[0];
+				console.log('Using authorized account:', web3Acc);
+
+				// Hide button, reveal user plussy
+				payButton.classList.add('gone');
+				
+				let accPlussy = document.getElementById('acc-plussy');
+				// accPlussy.classList.add('revealed');
+				accPlussy.classList.remove('gone');
+
+				renderUserPlussy(plussyContract, accPlussy);
+			});
+
+			// Fetch ABI.
+			const getContract = async (route, address) => {
+				const res = await fetch(route);
+				const contract = res.json();
+				try {
+					const provider = new ethers.providers.Web3Provider(ethereum);
+					const signer = provider.getSigner();
+					const connectedContract = new ethers.Contract(address, contract.abi, signer);
+					return connectedContract;
+				} catch (err) {
+					console.log(error);
+				}
+			}
+
+			const setUpEvents = async (contract) => {
+				contract.on("Plussied", (plussyAddress, plussy) =>{
+					let plussyContainer = document.getElementById('most-recent');
+					let { type, value } = typeOfPlussy(plussy);
+					renderPlussy(type, value);
+				});
+			}
+
+			// Get most recent plussy. Add to page.
+			const renderMostRecentPlussy = async (contract, container) => {
+				let plussy = await contract.getLastPlussiedPlussy();
+				let { type, value } = typeOfPlussy(plussy);
+				renderPlussy(type, value);
+			}
+
+			const renderUserPlussy = async (contract) => {
+				let plussy = await contract.getPlussy(userAccount.address);
+			}
+
+			const updateUserPlussy = async (contract) => {
+
+			}
+
+			const typeOfPlussy = (plussy) => {
+				
+			}
+
+			const renderPlussy = (type, value) => {
+				// description will contain plussyAddress
+				if (type == 'text') {
+					// Media will equal svg of text
+				} else if (type == 'svg') {
+					// Put svg into plussy-media
+				} else if (type == 'image') {
+					// put image + src into plussy-media
+				} else if (type == 'video') {
+					// put video into plussy-media
+				} else if (type == 'sound') {
+					// put audio player into plussy-media
+				} else if (type == 'url') {
+					// put 'check url in description' into svg
+				}
+			}
+
+
+			
 			// Get mostRecentPlussy
 			// Get userPlussy else plussy not found :0!! You can add one of your choosing, feel free to plussy it once every three days 
 			/*

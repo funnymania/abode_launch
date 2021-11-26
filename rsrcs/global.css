@@ -162,6 +162,10 @@ a {
 	visibility: visible;
 }
 
+.gone {
+	display: none;
+}
+
 #release-schedule {
 	background-color: #96f20c;
     border-bottom: 24px dashed #8C0D53;
@@ -290,6 +294,15 @@ a {
 .plussy-container {
 	background-color: #407540;
 	margin-bottom: 10%;
+	border-radius: 20px;
+}
+
+.plussy-container-title {
+	font-size: 1.17em;
+	font-weight: 700;
+	margin-top: 1.17em;
+	margin-bottom: 0.6em;
+	text-align:center;
 }
 
 .plussy-media {
