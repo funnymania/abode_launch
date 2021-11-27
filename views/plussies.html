@@ -30,40 +30,39 @@
 				<!-- Location on the network -->
 				<!-- Name (if it has one)-->
 				<!-- NFT fields -->
-				<div class="plussy-media"></div>
-				<div class="plussy-desc"></div>
+				<div id="chosen-media" class="plussy-media">
+					<div id="chosen-media-content"></div>
+					<button id="plussy-it" class="pay-button hidden">😽</button>
+				</div>
+				<div id="chosen-desc" class="plussy-desc">
+					<a id="chosen-address" href=""></a>
+					<div id="chosen-desc-desc"></div>
+				</div>
 			</div>
-			<button id="pay-button" class="pay-button">~ Connect to Web3 ~</button>
+			<button id="pay-button" class="pay-button">~ Connect to see Plussies! ~</button>
 			<div id="acc-plussy" class="plussy-container gone">
 				<div class="plussy-container-title">Your plussyspace</div>
-				<div class="plussy-media"></div>
-				<div class="plussy-desc"></div>
+				<div id="acc-media" class="plussy-media">
+					<div id="acc-media-content"></div>
+					<input id="plussy-entry" class="hidden">
+					<button id="new-plussy-button" class="revealed pay-button">Enter Anew Plussy</button>
+				</div>
+				<div id="acc-desc" class="plussy-desc">
+					<a id="acc-address" href=""></a>
+					<div id="acc-desc-desc"></div>
+				</div>
+			</div>
+			<div id="old-stuff" class="socials-container">
+				<div class="social-title">Old Web</div>
+				<h4>Come @ me: <a href="https://twitter.com/_funnymania">https://twitter.com/_funnymania</h4>
 			</div>
 		</div>
-		<h4>Com at me: <a href="https://twitter.com/_funnymania">https://twitter.com/_funnymania</h4>
 		<script>
-			// Inform user they need to have a web3 provider such as MetaMask installed.
+			// Account to be worked with.
 			let web3Acc;
-			let web3Connected = false;
+
+			// Metamask connect button. 
 			let payButton = document.getElementById('pay-button');
-			window.addEventListener('load', () => {
-				if (window.ethereum) {
-					console.log('Ethereum context is present.');
-					try {
-						let plussyContract = getContract('/plussy-abi', '0x237B1083A09E8B8D91C92b12a23c43013FF427B5');
-						setUpEvents(plussyContract);
-						renderMostRecentPlussy(plussyContract);
-					} catch (err) {
-						console.log('User denied account access')
-					}
-				} else if (window.web3) {
-					window.web3 = new Web3(web3.currentProvider);
-					initPayButton()
-					initNftButton()
-				} else {
-					console.log('No Metamask (or other Web3 Provider) installed')
-				}
-			});
 
 			// Connect to web3 account.
 			payButton.addEventListener('click', async() => {
@@ -71,61 +70,134 @@
 				web3Acc = accounts[0];
 				console.log('Using authorized account:', web3Acc);
 
-				// Hide button, reveal user plussy
+				let chainId = await ethereum.request({ method: 'eth_chainId' });
+				const rinkebyChainId = "0x4";
+				if (chainId !== rinkebyChainId) {
+					alert('Please connect to the Rinkeby Network, as this is where Plussies can be found');
+					return;
+				}
+
+				plussyContract = await getContract('/plussy-abi', '0xaEba1A609fE788B188a19655F9c8c2a2224544d5');
+				if (plussyContract === undefined) 
+					throw 'Contract ABI not found';
+
+				setUpEvents(plussyContract);
+
+				// Hide button, reveal acc's plussy
 				payButton.classList.add('gone');
+
+				plussyItButt.classList.add('revealed');
+				plussyItButt.classList.remove('hidden');
 				
 				let accPlussy = document.getElementById('acc-plussy');
-				// accPlussy.classList.add('revealed');
 				accPlussy.classList.remove('gone');
 
-				renderUserPlussy(plussyContract, accPlussy);
+				renderChosenPlussy(plussyContract);
+				renderUsersPlussy(accPlussy);
 			});
 
-			// Fetch ABI.
+			// Bring in chosen plussy
+			let plussyContract;
+			let chosenPlussyAddress;
+			window.addEventListener('load', async () => {
+				if (window.ethereum) {
+					console.log('Ethereum context is present');
+				} else if (window.web3) {
+					window.web3 = new Web3(web3.currentProvider);
+					try {
+						let plussyContract = getContract('/plussy-abi', '0xaEba1A609fE788B188a19655F9c8c2a2224544d5');
+						if (plussyContract === undefined) 
+							throw 'Contract ABI not found';
+
+						setUpEvents(plussyContract);
+					} catch (err) {
+						console.log('Problem loading chosen plussy')
+					}
+				} else {
+					console.log('No Metamask (or other Web3 Provider) installed')
+				}
+			});
+
+			// Fetch ABI and connect to contract.
 			const getContract = async (route, address) => {
 				const res = await fetch(route);
-				const contract = res.json();
+				const contract = await res.json();
 				try {
 					const provider = new ethers.providers.Web3Provider(ethereum);
 					const signer = provider.getSigner();
 					const connectedContract = new ethers.Contract(address, contract.abi, signer);
 					return connectedContract;
 				} catch (err) {
-					console.log(error);
+					console.log(err);
 				}
 			}
 
+			// Create event listeners associated with contract.
 			const setUpEvents = async (contract) => {
 				contract.on("Plussied", (plussyAddress, plussy) =>{
 					let plussyContainer = document.getElementById('most-recent');
 					let { type, value } = typeOfPlussy(plussy);
 					renderPlussy(type, value);
 				});
+
+				contract.on("AnewPlussy", (address, plussy) => {
+					let plussyContainer = document.getElementById('most-recent');
+					let { type, value } = typeOfPlussy(plussy);
+
+					// Grab top viewer and desc.
+					let viewer = document.getElementById('chosen-media-content');
+					let desc = document.getElementById('chosen-desc-desc');
+					let addrElem = document.getElementById('chosen-address');
+
+					let neededArr = [];
+					neededArr.push(plussy);
+					neededArr.push(address);
+
+					// Render to it.
+					renderPlussy(type, value, viewer, desc, addrElem, neededArr);
+				});
 			}
 
-			// Get most recent plussy. Add to page.
-			const renderMostRecentPlussy = async (contract, container) => {
-				let plussy = await contract.getLastPlussiedPlussy();
-				let { type, value } = typeOfPlussy(plussy);
-				renderPlussy(type, value);
-			}
+			// Get a very recent plussy.
+			const renderChosenPlussy = async (contract) => {
+				// Returns the string which represents someone's plussy.
+				let plussy = await contract.getChosenPlussy();
+				chosenPlussyAddress = plussy[1];
 
-			const renderUserPlussy = async (contract) => {
-				let plussy = await contract.getPlussy(userAccount.address);
-			}
+				// Figures out what this is from json URI associated with 721URI.
+				// This will be string, but of what? Could be a url to something on IPFS, 
+				// http, https, a simple message, some html code, we don't know!
+				// type can be 'text', or 'uri'
+				let { type, value } = typeOfPlussy(plussy[0]);
 
-			const updateUserPlussy = async (contract) => {
+				// Grab top viewer and desc.
+				let viewer = document.getElementById('chosen-media-content');
+				let desc = document.getElementById('chosen-desc-desc');
+				let addrElem = document.getElementById('chosen-address');
 
+				// Render to it.
+				renderPlussy(type, value, viewer, desc, addrElem, plussy);
 			}
 
 			const typeOfPlussy = (plussy) => {
-				
+				// Get protocol... that which comes before '://'
+				let ss = plussy.split('://');	
+				if (ss.length === 1) {
+					return { type: 'text', value: plussy };
+				}
+
+				// Assume it is some uri
+				return { type: 'uri', value: plussy };
 			}
 
-			const renderPlussy = (type, value) => {
+			const renderPlussy = (type, value, viewer, desc, addr, plussy) => {
 				// description will contain plussyAddress
 				if (type == 'text') {
 					// Media will equal svg of text
+					viewer.innerHTML = value;
+					desc.innerHTML = value;
+					addr.innerHTML = plussy[1];
+					addr.href = 'https://rinkeby.etherscan.io/address/' + plussy[1];
 				} else if (type == 'svg') {
 					// Put svg into plussy-media
 				} else if (type == 'image') {
@@ -136,12 +208,66 @@
 					// put audio player into plussy-media
 				} else if (type == 'url') {
 					// put 'check url in description' into svg
+					viewer.innerHTML = 'check url in description';
+					desc.innerHTML = value;
+					addr.innerHTML = plussy[1];
+					addr.href = 'https://rinkeby.etherscan.io/address/' + plussy[1];
 				}
 			}
 
+			let plussyNew = document.getElementById('new-plussy-button');
+			let plussyEntry = document.getElementById('plussy-entry');
+			let plussyButtonState = 0;
+			plussyNew.addEventListener('click', async () => {
+				if (plussyButtonState == 0) {
+					// Bring up plussy entry
+					plussyEntry.classList.add('revealed');	
+					plussyEntry.classList.remove('hidden');
+					plussyNew.innerHTML = 'Ship the Plussy';
+					plussyButtonState = 1;
+				} else if (plussyButtonState == 1) {
+					updateUserPlussy();		
+				}
+			});
 
+			let plussyItButt = document.getElementById('plussy-it');
+			let plussiedState = 0;
+			plussyItButt.addEventListener('click', async () => {
+				if (plussiedState == 0) {
+					plussyItButt.innerHTML = '😻';
+					plussiedState = 1;
+					await plussyContract.plusSomething(chosenPlussyAddress, { gasLimit: 300000 });
+					alert('Please share amongst your plussiloved 😽😽 !!');
+				} else {
+					alert('One plussy per day. Those are the rules, nyeow');
+				}
+			});
+
+			const renderUsersPlussy = async () => {
+				let plussy = await plussyContract.getPlussy(web3Acc);
+				if (plussy == 0) {
+					alert('Your plussy has not been found!! :0');
+					// Display button to add plussy.
+					plussyNew.classList.add('revealed');
+				} else {
+					let accElem = document.getElementById('acc-plussy');	
+					let { type, value } = typeOfPlussy(plussy);
+
+					// Grab top viewer and desc.
+					let viewer = document.getElementById('acc-media-content');
+					let desc = document.getElementById('acc-desc');
+
+					// Render to it.
+					renderPlussy(type, value, viewer, desc);
+				}
+			}
+
+			const updateUserPlussy = async () => {
+				let content = plussyEntry.value;
+				await plussyContract.updateContent(content);
+				alert('Your plussy has been snatched');
+			}
 			
-			// Get mostRecentPlussy
 			// Get userPlussy else plussy not found :0!! You can add one of your choosing, feel free to plussy it once every three days 
 			/*
 			* random plussy from last block (image, if available... video, if available... etc)

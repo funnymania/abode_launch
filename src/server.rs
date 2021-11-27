@@ -132,6 +132,36 @@ impl Server {
                             Ok(num) => (),
                         }
                     }
+                    "/plussy-abi" => {
+                        let mut content = Vec::new();
+                        match Server::get_file("/rsrcs/Plussy.json") {
+                            Ok(mut abi) => {
+                                abi.read_to_end(&mut content);
+                            }
+                            Err(e) => {
+                                format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                            }
+                        };
+
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                            Content-Type: application/json\r\n\
+                            Content-Length: {}\r\n\r\n",
+                            content.len(),
+                        );
+
+                        let mut byte_res: Vec<u8> = Vec::new();
+                        for byte in response.as_bytes() {
+                            byte_res.push(*byte);
+                        }
+
+                        for byte in content {
+                            byte_res.push(byte);
+                        }
+
+                        stream.write_all(&byte_res).unwrap();
+
+                    }
                     "/zoom-zaps" => {
                         let mut content = Vec::new();
                         match Server::get_file("/rsrcs/Transistors.json") {

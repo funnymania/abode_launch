@@ -285,7 +285,7 @@ a {
  */
 #plussy-feed {
 	display: flex;
-	padding: 10%;
+	padding: 10% 10% 0 10%;
 	justify-content: center;
 	flex-direction: column;
 	position: relative;
@@ -307,13 +307,64 @@ a {
 
 .plussy-media {
 	background-color: #80a480;
+	text-align: center;
 	height: 400px;
+	position: relative;
 }
 
 .plussy-desc {
 	height: 40px;
 	text-align: center;
 	background-color: #164016;
+}
+
+#chosen-desc {
+	display: flex;
+}
+
+#chosen-address {
+	flex: 1;
+}
+
+#chosen-desc-desc {
+	flex: 2;
+}
+
+#acc-address {
+	flex: 1;
+}
+
+#acc-desc-desc {
+	flex: 2;
+}
+
+#new-plussy-button {
+	position: absolute;
+	bottom: 0px;
+}
+
+#plussy-it {
+	position: absolute;
+	bottom: 0px;
+	font-size: 2em;
+	padding: 12px;
+}
+
+
+.socials-container {
+	/* background-color: #4040d6;	*/
+	margin-top: 5%;
+	margin-bottom: 10%;
+	border-radius: 20px;
+}
+
+.social-title {
+	font-size: 1.17em;
+	font-weight: 700;
+	font-family: sans-serif;
+	margin-top: 1.17em;
+	margin-bottom: 0.6em;
+	text-align:center;
 }
 
 @keyframes spin-slow {
