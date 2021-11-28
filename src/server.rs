@@ -132,6 +132,26 @@ impl Server {
                             Ok(num) => (),
                         }
                     }
+                    "/catch-a-feel" => {
+                        let content = match Server::get_page("/views/catch-a-feel.html") {
+                                Ok(html) => html,
+                                Err(e) => format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e)
+                            };
+                        response = format!(
+                            "HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/html\r\n\
+                                Content-Length: {}\r\n\r\n{}",
+                            content.len(),
+                            content
+                        );
+
+                        match stream.write_all(response.as_bytes()) {
+                            Err(msg) => {
+                                println!("Error: {}\n{}", msg, String::from_utf8_lossy(&req))
+                            }
+                            Ok(num) => (),
+                        }
+                    }
                     "/plussy-abi" => {
                         let mut content = Vec::new();
                         match Server::get_file("/rsrcs/Plussy.json") {
@@ -742,6 +762,35 @@ impl Server {
                                                 response = format!(
                                                     "HTTP/1.1 200 OK\r\n\
                                                     Content-Type: image/svg+xml\r\n\
+                                                    Content-Length: {}\r\n\r\n",
+                                                    content.len(),
+                                                );
+                                                let mut byte_res: Vec<u8> = Vec::new();
+                                                for byte in response.as_bytes() {
+                                                    byte_res.push(*byte);
+                                                }
+
+                                                for byte in content {
+                                                    byte_res.push(byte);
+                                                }
+
+                                                stream.write_all(&byte_res).unwrap();
+                                            }
+                                            "gif" => {
+                                                match Server::get_file(
+                                                    format!("/rsrcs/gifs/{}", str_req.1).as_str(),
+                                                ) {
+                                                    Ok(mut gif) => {
+                                                        gif.read_to_end(&mut content);
+                                                    }
+                                                    Err(e) => {
+                                                        format!("<html><body>Webpage was not formatted correctly, please @funnymania_ in case they are sleeping (Zzzz):<br><a href=\"https://twitter.com/funnymania_\">https://twitter.com/funnymania_</a><br><br>Error: {}</body></html>", e);
+                                                    }
+                                                };
+                                                println!("GIF bytes read: {}", content.len());
+                                                response = format!(
+                                                    "HTTP/1.1 200 OK\r\n\
+                                                    Content-Type: image/gif\r\n\
                                                     Content-Length: {}\r\n\r\n",
                                                     content.len(),
                                                 );

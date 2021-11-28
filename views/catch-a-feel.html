@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>catch a feel</title>
+		<meta name="description" content="Just a basic page.">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+		<link rel="icon" href="https://funnymania.lol/favicon.ico">
+		<link rel="stylesheet" href="global.css">
+		<style>
+			html {
+				height: 100%;
+			}
+			#splash {
+				width: 100%;
+				height: 100%;
+			}
+			body {
+				margin: 0px;	
+				background-color: #f2b8c6;
+				color: #1a1a36;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="root" class="flex-center gone">
+			<div id="bar-flex">
+				<h2>catch a feel~~</h2>
+				<div id="feel-input">
+					<div id="feel-input-center">
+						<span>Add your feel:</span>
+						<input placeholder="feel feel">
+						<button id="feel-submit">beep</button>
+					</div>
+				</div>
+			</div>
+			<div id="feels-row">
+				<div class="feels-square">
+					<img src="penguindrumHimariIntro.gif">
+				</div>
+				<div class="feels-square">
+					<img src="61067.gif">
+				</div>
+				<div class="feels-square">
+					<img src="p5-menu.gif">
+				</div>
+				<div class="feels-square">
+					<img src="23t5l4g.gif">	
+				</div>
+				<div class="feels-square">
+					<img src="penguindrumHimariTakeYourHeart.gif">	
+				</div>
+			</div>	
+			<h3 class="flex-line-up">down to feel? touch one above, submit a response</h3>
+		</div>
+		<button id="solana-connect" class="pay-button">connect yourself</button>
+		<script>
+			let currentSelection;
+
+			// contact: acc.
+			// feel: [emoji] [something you feel]
+			// create a 'feel' 
+			// display all 'feels'
+			// contract sets your 'feel' (could also be a clip)
+			const Feel = function(Address, Something, Element) {
+				let address = Address;
+				let something = Something;
+				let element = Element;
+			}
+			
+			let root = document.getElementById('root');
+
+			window.addEventListener('load', async () => {
+				await checkSolanaConnection();
+			});
+
+			let feels = [];
+			const checkSolanaConnection = async () => {
+				try {
+					if (solana && solana.isPhantom) {
+						console.log('Phantom wallet is on');	
+
+						const res = await solana.connect({ onlyIfTrusted: true });
+						console.log(
+							'Connected with Public Key:',
+							res.publicKey.toString()
+						);
+
+						solanaConnect.classList.add('gone');
+						root.classList.remove('gone');
+
+						// Bring in feels from blockchain as Feel[]
+
+						// Add event listeners for touch.
+
+					} else {
+						alert('feelings require a Phantom... https://phantom.app');
+					}
+				} catch (err) {
+					console.error(err);
+				}
+			};
+
+			let solanaConnect = document.getElementById('solana-connect');
+			solanaConnect.addEventListener('click', async () => {
+				if (solana) {
+					const res = await solana.connect();
+					console.log(
+						'Connected with Public Key:',
+						res.publicKey.toString()
+					);
+					solanaConnect.classList.add('gone');
+					root.classList.remove('gone');
+				} else {
+					alert('hellooo?? ..get a phantom! :0 https://phantom.app');
+				}	
+			});	
+
+			let feelSubmit = document.getElementById('feel-submit');
+			let feelInput = document.getElementById('feel-input');
+			feelSubmit.addEventListener('click', async () => {
+				let feeling = feelInput.value;
+
+				// Add to blockchain
+			});
+		</script>
+	</body>
+</html>

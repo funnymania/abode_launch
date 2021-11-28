@@ -26,6 +26,14 @@ a {
     text-decoration: underline;
 }
 
+.flex-center {
+	display: flex;
+	padding: 4% 4% 0 4%;
+	justify-content: center;
+	flex-direction: column;
+	position: relative;
+}
+
 #splash-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -350,7 +358,6 @@ a {
 	padding: 12px;
 }
 
-
 .socials-container {
 	/* background-color: #4040d6;	*/
 	margin-top: 5%;
@@ -365,6 +372,43 @@ a {
 	margin-top: 1.17em;
 	margin-bottom: 0.6em;
 	text-align:center;
+}
+
+/**
+ * feels
+ */
+#feels-row {
+    display: flex;
+}
+
+.feels-square {
+	width: 20%;
+	border-radius-right: 20px;
+}
+
+.feels-square > img {
+	max-width: 100%;
+}
+
+#bar-flex {
+	display: flex;
+	justify-content: space-evenly;
+}
+
+.flex-line-up {
+	display: flex;
+	justify-content: center;
+}
+
+#feel-input {
+	width: 46%;
+	position: relative;
+}
+
+#feel-input-center {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
 }
 
 @keyframes spin-slow {
